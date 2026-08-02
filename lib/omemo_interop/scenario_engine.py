@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
+from omemo_interop.runner_registry import ROOT
 
 
 @dataclass
@@ -108,9 +108,9 @@ class WireProcess:
             "--send",
             body,
             "--jid",
-            sender.jid,
+            self.participant.jid,
             "--password",
-            sender.password,
+            self.participant.password,
             "--host",
             "127.0.0.1",
             "--port",

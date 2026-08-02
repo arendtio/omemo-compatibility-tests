@@ -1,3 +1,7 @@
+## Registry
+
+- `python3 scripts/generate-clients-registry.py` — Build `config/clients-registry.yaml` (70 implementations)
+
 ## Build Commands
 
 - `pip install -e ".[dev]"` — Install suite dependencies
@@ -12,7 +16,8 @@
 - `python3 -m pytest tests/ -v -m omemo2` — Optional OMEMO 2 tests
 - `./scripts/run-suite.sh` — Download + upstream + legacy tests
 - `./scripts/run-suite.sh --wire` — Includes client matrix over ejabberd
-- `python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build` — Client interop only
+- `python3 scripts/run-scenario.py scenarios/legacy/full_conversation.yaml` — Multi-message scenario
+- `python3 scripts/run-extended-matrix.py --tier smoke` — Pairwise smoke matrix
 
 ## Docker
 

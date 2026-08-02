@@ -129,8 +129,9 @@ class OmemoWireClient(ClientXMPP):
     async def _on_session_start(self, _event: Any) -> None:
         self.send_presence()
         await self.get_roster()
-        xep = self["xep_0384"]
-        await self.wait_for_event("omemo_initialized")
+        omemo_ready = asyncio.Event()
+        self.add_event_handler("omemo_initialized", lambda _: omemo_ready.set())
+        await asyncio.wait_for(omemo_ready.wait(), timeout=60)
         self._omemo_ready.set()
         self._connected.set()
 
@@ -152,8 +153,17 @@ class OmemoWireClient(ClientXMPP):
             log.exception("decrypt failed")
 
     async def connect_and_wait(self, timeout: float = 60.0) -> None:
+        import ssl
+
+        self.enable_starttls = True
+        self.enable_direct_tls = False
+        self.enable_plaintext = True
+        insecure_ctx = ssl.create_default_context()
+        insecure_ctx.check_hostname = False
+        insecure_ctx.verify_mode = ssl.CERT_NONE
+        self.ssl_context = insecure_ctx
         self._register_omemo()
-        self.connect((XMPP_HOST, XMPP_PORT))
+        self.connect(host=XMPP_HOST, port=XMPP_PORT)
         await asyncio.wait_for(self._connected.wait(), timeout=timeout)
         await asyncio.wait_for(self._omemo_ready.wait(), timeout=timeout)
 

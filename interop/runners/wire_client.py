@@ -24,6 +24,11 @@ log = logging.getLogger(__name__)
 
 
 def ensure_vendor_slixmpp() -> None:
+    try:
+        import slixmpp_omemo  # noqa: F401
+        return
+    except ImportError:
+        pass
     slixmpp_vendor = ROOT / "vendor" / "slixmpp-omemo"
     if not slixmpp_vendor.exists():
         raise RuntimeError("vendor/slixmpp-omemo missing — run download-implementations.py")
@@ -122,11 +127,15 @@ async def run_slixmpp_wire(
     data_dir.mkdir(parents=True, exist_ok=True)
     last_body: Optional[str] = None
     receive_event = asyncio.Event()
+    omemo_ready = asyncio.Event()
 
     class Client(ClientXMPP):
         async def on_start(self, _event: Any) -> None:
             self.send_presence()
             await self.get_roster()
+
+        async def on_omemo_ready(self, _event: Any) -> None:
+            omemo_ready.set()
 
         async def on_message(self, stanza: Message) -> None:
             nonlocal last_body
@@ -148,6 +157,7 @@ async def run_slixmpp_wire(
 
     xmpp = Client(jid, password)
     xmpp.add_event_handler("session_start", xmpp.on_start)
+    xmpp.add_event_handler("omemo_initialized", xmpp.on_omemo_ready)
     xmpp.register_handler(
         CoroutineCallback(
             "WireMsg",
@@ -163,9 +173,18 @@ async def run_slixmpp_wire(
         module=sys.modules[__name__],
     )
 
-    xmpp.connect((host, port))
-    await xmpp.connected_event.wait()
-    await xmpp.wait_for_event("omemo_initialized")
+    import ssl
+
+    xmpp.enable_starttls = True
+    xmpp.enable_direct_tls = False
+    xmpp.enable_plaintext = True
+    insecure_ctx = ssl.create_default_context()
+    insecure_ctx.check_hostname = False
+    insecure_ctx.verify_mode = ssl.CERT_NONE
+    xmpp.ssl_context = insecure_ctx
+
+    await xmpp.connect(host=host, port=port)
+    await asyncio.wait_for(omemo_ready.wait(), timeout=90)
     await asyncio.sleep(2)
 
     if mode == "send":
