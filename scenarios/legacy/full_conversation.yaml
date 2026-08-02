@@ -1,0 +1,46 @@
+id: full_conversation_slixmpp
+description: Full multi-message conversation using vendor slixmpp-omemo (real code path)
+namespace: eu.siacs.conversations.axolotl
+timeout_seconds: 180
+participants:
+  - alias: alice
+    implementation: slixmpp-omemo
+    jid: alice@localhost
+    password: alicepass
+  - alias: bob
+    implementation: slixmpp-omemo
+    jid: bob@localhost
+    password: bobpass
+steps:
+  - action: conversation_roundtrip
+    alice: alice
+    bob: bob
+    message_a: "conv-1-hello"
+    message_b: "conv-1-reply"
+  - action: sleep
+    seconds: 2
+  - action: wait_incoming
+    who: bob
+    body: "conv-2-followup"
+  - action: send
+    from: alice
+    to: bob
+    body: "conv-2-followup"
+  - action: await_delivery
+    who: bob
+    timeout: 60
+  - action: wait_incoming
+    who: alice
+    body: "conv-2-ack"
+  - action: send
+    from: bob
+    to: alice
+    body: "conv-2-ack"
+  - action: await_delivery
+    who: alice
+    timeout: 60
+  - action: conversation_roundtrip
+    alice: alice
+    bob: bob
+    message_a: "conv-3-final"
+    message_b: "conv-3-goodbye"

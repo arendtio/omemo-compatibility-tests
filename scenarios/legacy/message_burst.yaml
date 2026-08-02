@@ -1,0 +1,45 @@
+id: burst_messages
+description: Rapid burst of encrypted messages to stress session ratcheting
+namespace: eu.siacs.conversations.axolotl
+participants:
+  - alias: alice
+    implementation: slixmpp-omemo
+    jid: alice@localhost
+    password: alicepass
+  - alias: bob
+    implementation: slixmpp-omemo
+    jid: bob@localhost
+    password: bobpass
+steps:
+  - action: conversation_roundtrip
+    alice: alice
+    bob: bob
+    message_a: "burst-0"
+    message_b: "burst-0-ack"
+  - action: wait_incoming
+    who: bob
+    body: "burst-1"
+  - action: send
+    from: alice
+    to: bob
+    body: "burst-1"
+  - action: await_delivery
+    who: bob
+  - action: wait_incoming
+    who: bob
+    body: "burst-2"
+  - action: send
+    from: alice
+    to: bob
+    body: "burst-2"
+  - action: await_delivery
+    who: bob
+  - action: wait_incoming
+    who: bob
+    body: "burst-3"
+  - action: send
+    from: alice
+    to: bob
+    body: "burst-3"
+  - action: await_delivery
+    who: bob

@@ -34,10 +34,23 @@ implementations:
     branch: master
     type: client
     namespace: eu.siacs.conversations.axolotl
-    wire_runner: conversations
-    crypto_paths:
-      - src/main/java/eu/siacs/conversations/crypto/axolotl
-      - src/main/java/im/conversations/android/xmpp/model/axolotl
+    wire_runner: conversations_android_crypto
+
+  - id: gajim
+    description: Gajim desktop client — omemo_dr stack
+    repo: https://dev.gajim.org/gajim/gajim.git
+    branch: main
+    type: client
+    namespace: eu.siacs.conversations.axolotl
+    wire_runner: gajim_omemo_dr
+
+  - id: dino
+    description: Dino GTK client
+    repo: https://github.com/dino/dino.git
+    branch: main
+    type: client
+    namespace: eu.siacs.conversations.axolotl
+    wire_runner: dino_native
 
   - id: monal
     description: Monal iOS client — legacy axolotl OMEMO (not OMEMO 2)
@@ -45,11 +58,7 @@ implementations:
     branch: main
     type: client
     namespace: eu.siacs.conversations.axolotl
-    wire_runner: monal
-    crypto_paths:
-      - Monal/Classes/MLOMEMO.m
-      - Monal/Classes/MLSignalStore.m
-      - Monal/Classes/AESGcm.m
+    wire_runner: monal_native
 
   # OMEMO 2 backends — optional, not used in default interop matrix
   - id: python-twomemo

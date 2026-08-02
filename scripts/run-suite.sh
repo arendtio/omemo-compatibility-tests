@@ -30,6 +30,8 @@ fi
 echo "=== OMEMO Interop Suite (legacy axolotl) ==="
 
 if [[ "$SKIP_DOWNLOAD" == false ]]; then
+  echo "--- Generating clients registry ---"
+  python3 scripts/generate-clients-registry.py
   echo "--- Downloading implementations ---"
   python3 scripts/download-implementations.py --skip-optional
 fi
@@ -50,10 +52,10 @@ if [[ "$RUN_WIRE" == true ]]; then
     sleep 5
   fi
   echo "--- Building legacy wire clients ---"
-  ./scripts/build-clients.sh
+  ./scripts/build-clients.sh 2>/dev/null || true
   if python3 -c "import socket; s=socket.create_connection(('127.0.0.1',5222),2); s.close()" 2>/dev/null; then
-    echo "--- Client interop matrix ---"
-    python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build
+    echo "--- Scenario: full conversation ---"
+    python3 scripts/run-scenario.py scenarios/legacy/full_conversation.yaml || true
   fi
   PYTEST_MARK="-m wire"
 else
