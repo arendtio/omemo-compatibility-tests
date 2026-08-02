@@ -12,6 +12,9 @@ pairs:
     right: siskin_im
     scenarios:
       - alice_sends_bob_replies
+      - bob_sends_alice_replies
+      - unicode_body_roundtrip
+      - repeated_session_messages
 
   - id: conversations-vs-monal
     description: Conversations Android crypto stack vs Monal iOS crypto stack

@@ -1,0 +1,111 @@
+# Conversations (Android) vs Siskin IM legacy OMEMO compatibility surface.
+# Namespace: eu.siacs.conversations.axolotl (not urn:xmpp:omemo:2).
+#
+# Sources:
+#   vendor/conversations — AxolotlService, XmppAxolotlMessage, Config
+#   vendor/siskin_im + tigase/MartinOMEMO — OMEMOModule.swift
+# Wire runners today use Smack VAxolotl proxies; protocol tests use python-oldmemo
+# as the Conversations wire-format reference implementation.
+
+gaps:
+  - id: auth_tag_in_ratchet_key
+    title: AES-GCM auth tag carried inside ratchet-decrypted key material
+    conversations: "PUT_AUTH_TAG_INTO_KEY=true; payload decrypt requires 32-byte key (16 key + 16 tag)"
+    siskin: "MartinOMEMO combines key(16)+authTag(16) before libsignal encrypt"
+    risk: "Clients < Conversations 1.16 cannot decrypt modern payloads"
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_auth_tag_in_key_roundtrip
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_payload_ciphertext_excludes_gcm_tag
+
+  - id: prekey_attribute_values
+    title: prekey attribute on <key> elements
+    conversations: "getAttributeAsBoolean accepts true and 1"
+    siskin: "accepts prekey=true or prekey=1"
+    risk: low
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_prekey_attribute_one_decrypts_like_true
+
+  - id: key_transport_empty_payload
+    title: Session-establishment messages without <payload>
+    conversations: "AUTOMATICALLY_COMPLETE_SESSIONS sends key-transport; decrypt skips payload"
+    siskin: "decode returns successTransportKey when payload missing"
+    risk: "Broken sessions if key-transport mishandled"
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_key_transport_without_payload_then_chat
+      - tests/compatibility/test_conversations_siskin_wire.py::test_wire_session_survives_after_first_message
+
+  - id: iv_length_12_bytes
+    title: 12-byte AES-GCM IV (Conversations >= 2.7.0)
+    conversations: "generateIv() uses 12 random bytes"
+    siskin: "12-byte IV in OMEMOModule encode/decode"
+    risk: "16-byte legacy IVs break decrypt"
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_iv_on_wire_is_twelve_bytes
+
+  - id: omemo_padding_disabled
+    title: OMEMO random padding disabled
+    conversations: "OMEMO_PADDING=false"
+    siskin: "no padding layer in MartinOMEMO payload path"
+    risk: low
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_unicode_plaintext_without_padding
+
+  - id: pep_node_naming
+    title: PEP node names and item ids
+    conversations: "devicelist, bundles:<id>, item id current"
+    siskin: "same node names and current item id"
+    risk: "Wrong node names break bundle fetch"
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_pep_node_names_match_conversations
+
+  - id: open_pep_access
+    title: Device lists and bundles must be openly readable
+    conversations: "PublishOptions.openAccess() when supported"
+    siskin: "pubsub access_model open on publish"
+    risk: "Whitelist PEP blocks cross-client decrypt (Monal-class bugs)"
+    aligned: true
+    mitigated_by: docker/ejabberd/ejabberd.yml force_node_config
+    tests:
+      - tests/compatibility/test_conversations_siskin_wire.py::test_wire_cross_fetch_without_prior_roster
+
+  - id: file_vs_message_key_sizes
+    title: Attachment AES-GCM key sizes differ from chat messages
+    conversations: "16-byte message keys; aesgcm:// uses 32-byte file keys"
+    siskin: "same aesgcm scheme with 32-byte file keys"
+    risk: "Wrong key size breaks attachment decrypt only"
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_documented_file_key_size_differs_from_message
+
+  - id: trust_model
+    title: Identity trust enforcement
+    conversations: "trustedAndActive gating on send; TOFU in UI"
+    siskin: "DBOMEMOStore.isTrusted() always true; UI-level trust only"
+    risk: "Siskin sends to untrusted fingerprints; Conversations may refuse"
+    aligned: false
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_trust_model_difference_documented
+
+  - id: muc_omemo_policy
+    title: MUC OMEMO availability rules
+    conversations: "OMEMO in MUC with member fan-out"
+    siskin: "OMEMO only when membersOnly + nonAnonymous; per-member 1:1 encrypt"
+    risk: "Public MUC OMEMO works in Conversations but not Siskin"
+    aligned: false
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_muc_policy_difference_documented
+
+  - id: omemo2_namespace
+    title: OMEMO 2 namespace support
+    conversations: "legacy axolotl only in vendor tree"
+    siskin: "legacy axolotl only; no urn:xmpp:omemo:2"
+    risk: none for 1:1 legacy interop
+    aligned: true
+    tests:
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_legacy_message_uses_axolotl_namespace_only

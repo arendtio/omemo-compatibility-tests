@@ -101,6 +101,174 @@ def run_client(
     return run(args, timeout=90)
 
 
+def scenario_bob_sends_alice_replies(left: str, right: str, matrix: dict) -> int:
+    """Bob (right) initiates; Alice (left) replies — tests reverse prekey handshake."""
+    alice_jid = "alice@localhost"
+    bob_jid = "bob@localhost"
+    tag = f"{right}-to-{left}"
+
+    alice_proc = subprocess.Popen(
+        [
+            str(client_launcher(left, matrix)),
+            "--mode", "wait",
+            "--expect", f"hello-{tag}",
+            "--",
+            "--jid", alice_jid,
+            "--password", "alicepass",
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    )
+    time.sleep(12)
+
+    rc = run_client(
+        right, matrix, "send",
+        bob_jid, "bobpass",
+        peer=alice_jid,
+        send=f"hello-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+    )
+    if rc != 0:
+        alice_proc.kill()
+        return rc
+
+    try:
+        alice_rc = alice_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
+        return 1
+    if alice_rc != 0:
+        return alice_rc
+
+    bob_proc = subprocess.Popen(
+        [
+            str(client_launcher(right, matrix)),
+            "--mode", "wait",
+            "--expect", f"reply-{tag}",
+            "--",
+            "--jid", bob_jid,
+            "--password", "bobpass",
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    )
+    time.sleep(1)
+    rc = run_client(
+        left, matrix, "send",
+        alice_jid, "alicepass",
+        peer=bob_jid,
+        send=f"reply-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        return bob_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+
+
+def scenario_unicode_body_roundtrip(left: str, right: str, matrix: dict) -> int:
+    alice_jid = "alice@localhost"
+    bob_jid = "bob@localhost"
+    tag = f"{left}-to-{right}"
+    hello = f"hello-unicode-🧪-{tag}"
+    reply = f"reply-unicode-🧪-{tag}"
+
+    bob_proc = subprocess.Popen(
+        [
+            str(client_launcher(right, matrix)),
+            "--mode", "wait",
+            "--expect", hello,
+            "--",
+            "--jid", bob_jid,
+            "--password", "bobpass",
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    )
+    time.sleep(12)
+    rc = run_client(
+        left, matrix, "send",
+        alice_jid, "alicepass",
+        peer=bob_jid,
+        send=hello,
+        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        bob_rc = bob_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+    if bob_rc != 0:
+        return bob_rc
+
+    alice_proc = subprocess.Popen(
+        [
+            str(client_launcher(left, matrix)),
+            "--mode", "wait",
+            "--expect", reply,
+            "--",
+            "--jid", alice_jid,
+            "--password", "alicepass",
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    )
+    time.sleep(1)
+    rc = run_client(
+        right, matrix, "send",
+        bob_jid, "bobpass",
+        peer=alice_jid,
+        send=reply,
+        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+    )
+    if rc != 0:
+        alice_proc.kill()
+        return rc
+    try:
+        return alice_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
+        return 1
+
+
+def scenario_repeated_session_messages(left: str, right: str, matrix: dict) -> int:
+    """Two roundtrips on the same OMEMO stores — second leg uses established sessions."""
+    for n in (1, 2):
+        rc = scenario_alice_sends_bob_replies(left, right, matrix)
+        if rc != 0:
+            print(f"Repeated session leg {n} failed")
+            return rc
+    return 0
+
+
+SCENARIO_HANDLERS = {
+    "alice_sends_bob_replies": None,  # defined below
+    "cross_session_roundtrip": None,
+    "bob_sends_alice_replies": scenario_bob_sends_alice_replies,
+    "unicode_body_roundtrip": scenario_unicode_body_roundtrip,
+    "repeated_session_messages": scenario_repeated_session_messages,
+}
+
+
 def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
@@ -142,7 +310,6 @@ def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int
     if bob_rc != 0:
         return bob_rc
 
-    # Bob replies
     alice_proc = subprocess.Popen(
         [
             str(client_launcher(left, matrix)),
@@ -174,6 +341,10 @@ def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int
     except subprocess.TimeoutExpired:
         alice_proc.kill()
         return 1
+
+
+SCENARIO_HANDLERS["alice_sends_bob_replies"] = scenario_alice_sends_bob_replies
+SCENARIO_HANDLERS["cross_session_roundtrip"] = scenario_alice_sends_bob_replies
 
 
 def ejabberdctl_cmd() -> list[str]:
@@ -238,11 +409,11 @@ def main() -> int:
 
     for scenario in pair["scenarios"]:
         print(f"\n=== Scenario: {scenario} ({pair['id']}) ===")
-        if scenario in {"alice_sends_bob_replies", "cross_session_roundtrip"}:
-            rc = scenario_alice_sends_bob_replies(pair["left"], pair["right"], matrix)
-        else:
+        handler = SCENARIO_HANDLERS.get(scenario)
+        if handler is None:
             print(f"Unknown scenario: {scenario}")
             return 1
+        rc = handler(pair["left"], pair["right"], matrix)
         if rc != 0:
             print(f"FAIL scenario {scenario}")
             return rc

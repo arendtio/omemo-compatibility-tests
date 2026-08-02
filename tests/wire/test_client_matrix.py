@@ -36,6 +36,17 @@ def matrix_pairs() -> list:
 
 @pytest.mark.wire
 @skip_no_server
+def test_conversations_vs_siskin_legacy_roundtrip() -> None:
+    """Conversations vendor runner and Siskin vendor runner over ejabberd."""
+    rc = subprocess.call(
+        [sys.executable, str(INTEROP_SCRIPT), "--pair", "conversations-vs-siskin", "--build"],
+        cwd=ROOT,
+    )
+    assert rc == 0
+
+
+@pytest.mark.wire
+@skip_no_server
 def test_conversations_vs_monal_legacy_roundtrip() -> None:
     """Conversations vendor runner and Monal vendor runner over ejabberd."""
     rc = subprocess.call(

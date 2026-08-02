@@ -17,6 +17,7 @@
 - `./scripts/run-suite.sh` — Download + upstream + legacy tests
 - `./scripts/run-suite.sh --wire` — Includes client matrix over ejabberd
 - `python3 scripts/run-scenario.py scenarios/legacy/full_conversation.yaml` — Multi-message scenario
+- `python3 -m pytest tests/compatibility/ -v -m compatibility` — Conversations vs Siskin protocol alignment tests
 - `python3 scripts/run-interop-matrix.py --pair conversations-vs-siskin --build` — Conversations vs Siskin IM wire matrix
 
 ## Docker

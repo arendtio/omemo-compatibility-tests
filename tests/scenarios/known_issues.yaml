@@ -43,7 +43,15 @@ scenarios:
       Some clients send pubsub publish-options; ejabberd may error unless
       subscriptions exist first.
 
-  - id: multi_device_fanout
+  - id: conversations_siskin_compat
+    title: Conversations vs Siskin legacy OMEMO alignment and known divergences
+    source: config/conversations-siskin-compat.yaml
+    affected: [conversations, siskin_im]
+    status: tested
+    description: >
+      Documents auth-tag-in-key, key transport, PEP naming, trust/MUC policy gaps.
+    test: tests/compatibility/test_conversations_siskin_protocol.py
+
     title: All recipient devices must receive encrypted copies
     source: XEP-0384
     affected: [all]
