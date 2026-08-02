@@ -1,0 +1,49 @@
+# Upstream OMEMO-related implementations to clone and test.
+# Paths are relative to vendor/
+
+implementations:
+  - id: python-omemo
+    description: Core OMEMO protocol library (XEP-0384)
+    repo: https://github.com/Syndace/python-omemo.git
+    branch: main
+    type: library
+  - id: python-twomemo
+    description: OMEMO 2 backend (urn:xmpp:omemo:2) — Monal, Dino, modern clients
+    repo: https://github.com/Syndace/python-twomemo.git
+    branch: main
+    type: library
+  - id: python-oldmemo
+    description: Legacy OMEMO backend (eu.siacs.conversations.axolotl) — Conversations
+    repo: https://github.com/Syndace/python-oldmemo.git
+    branch: main
+    type: library
+  - id: slixmpp-omemo
+    description: Slixmpp OMEMO plugin — wire-format client proxy
+    repo: https://github.com/Syndace/slixmpp-omemo.git
+    branch: main
+    type: library
+  - id: ejabberd
+    description: ejabberd XMPP server (reference + Docker image)
+    repo: https://github.com/processone/ejabberd.git
+    branch: master
+    type: server
+    clone_only: true
+  - id: conversations
+    description: Conversations Android client (reference; unit tests require Android SDK)
+    repo: https://github.com/siacs/Conversations.git
+    branch: master
+    type: client
+    optional: true
+    clone_only: true
+  - id: monal
+    description: Monal iOS client (reference; requires Xcode)
+    repo: https://github.com/monal-im/Monal.git
+    branch: main
+    type: client
+    optional: true
+    clone_only: true
+
+# Commands run from each implementation directory after pip install -e .
+upstream_test_commands:
+  python-omemo: "pip install -e '.[dev]' -q && python3 -m pytest tests/ -q"
+  slixmpp-omemo: "pip install -e '.[test]' -q && python3 -m pytest tests/ -q"

@@ -1,0 +1,51 @@
+# Documented OMEMO interoperability scenarios derived from real-world bug reports.
+# Each entry maps to a pytest in tests/scenarios/
+
+scenarios:
+  - id: pep_access_whitelist
+    title: PEP nodes created with whitelist access block cross-client bundle fetch
+    source: https://github.com/processone/ejabberd/issues/4103
+    affected: [ejabberd, monal, converse]
+    status: mitigated_by_server_config
+    description: >
+      OMEMO device lists and bundles must use access_model open on PEP nodes.
+      Monal cannot decrypt if prekeys/devicelist are not world-readable.
+
+  - id: slixmpp_monal_pep_open
+    title: Bots must publish PEP with open access for Monal
+    source: https://github.com/monal-im/Monal/discussions/1432
+    affected: [monal, slixmpp-omemo]
+    status: documented
+    description: >
+      slixmpp-omemo bots need open PEP nodes; Monal self-healing requires
+      readable bundles.
+
+  - id: key_transport_empty_payload
+    title: Key transport messages without payload must not break sessions
+    source: python-omemo regression test_regression0
+    affected: [libervia, monal, all]
+    status: tested
+    test: tests/cross_backend/test_oldmemo_twomemo.py::test_key_transport_without_payload_twomemo
+
+  - id: oldmemo_twomemo_cross_encrypt
+    title: Legacy and OMEMO 2 clients must interoperate via dual-backend negotiation
+    source: XEP-0384 multi-version support
+    affected: [conversations, monal, dino, gajim]
+    status: tested
+    test: tests/cross_backend/test_oldmemo_twomemo.py
+
+  - id: ejabberd_publish_options
+    title: ejabberd rejects publish-options on OMEMO bundle upload
+    source: https://github.com/processone/ejabberd/issues/4533
+    affected: [ejabberd, atalk]
+    status: open
+    description: >
+      Some clients send pubsub publish-options; ejabberd may error unless
+      subscriptions exist first.
+
+  - id: multi_device_fanout
+    title: All recipient devices must receive encrypted copies
+    source: XEP-0384
+    affected: [all]
+    status: tested
+    test: tests/cross_backend/test_multi_device.py::test_dual_backend_recipient_accepts_both_namespaces

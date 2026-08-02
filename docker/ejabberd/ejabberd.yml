@@ -1,0 +1,107 @@
+###
+### ejabberd configuration for OMEMO interoperability testing
+###
+
+hosts:
+  - "localhost"
+
+loglevel: warning
+
+listen:
+  -
+    port: 5222
+    module: ejabberd_c2s
+    max_stanza_size: 262144
+    shaper: c2s_shaper
+    access: c2s
+    starttls: false
+  -
+    port: 5280
+    module: ejabberd_http
+    request_handlers:
+      "/admin": ejabberd_web_admin
+
+acl:
+  local:
+    user_regexp: ""
+  loopback:
+    ip:
+      - "127.0.0.0/8"
+      - "::1/128"
+
+access_rules:
+  local:
+    allow: local
+  c2s:
+    deny: blocked
+    allow: all
+  announce:
+    allow: all
+  configure:
+    deny: all
+  pubsub_createnode:
+    allow: local
+  trusted_network:
+    allow: loopback
+
+shaper:
+  normal: 1000
+  fast: 50000
+shaper_rules:
+  max_user_sessions: 10
+  max_user_offline_messages:
+    - 5000
+    - admin
+  c2s_shaper: none
+  s2s_shaper: none
+
+modules:
+  mod_adhoc: {}
+  mod_configure: {}
+  mod_disco: {}
+  mod_ping: {}
+  mod_privacy: {}
+  mod_private: {}
+  mod_roster: {}
+  mod_s2s_dialback: {}
+  mod_shared_roster: {}
+  mod_vcard: {}
+  mod_version:
+    show_os: false
+
+  mod_caps: {}
+
+  mod_pubsub:
+    access_createnode: pubsub_createnode
+    ignore_pep_from_offline: false
+    last_item_cache: false
+    max_items_node: 1000
+    default_node_config:
+      max_items: 1000
+    plugins:
+      - "pep"
+      - "flat"
+    force_node_config:
+      # Required for OMEMO: open access so all clients can fetch bundles/device lists
+      # See https://github.com/processone/ejabberd/issues/2425
+      "eu.siacs.conversations.axolotl.*":
+        access_model: open
+      "urn:xmpp:omemo:2.*":
+        access_model: open
+
+  mod_mam:
+    db_type: mnesia
+    assume_mam_usage: true
+    default: always
+
+  mod_muc:
+    access: local
+    access_create: local
+    access_persistent: local
+    access_admin: local
+
+  mod_carbon: {}
+  mod_client_state: {}
+
+auth_method: internal
+auth_password_format: plain

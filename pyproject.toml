@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omemo-interop-suite"
+version = "0.1.0"
+description = "Reproducible OMEMO interoperability test suite for XMPP clients and servers"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "slixmpp>=1.8.0,<2",
+    "slixmpp-omemo>=2.1.0",
+    "OMEMO>=2.0.0",
+    "Twomemo[xml]>=2.0.0",
+    "Oldmemo[xml]>=2.0.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "aiohttp>=3.8",
+]
+
+[tool.setuptools.packages.find]
+where = ["lib"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "wire: tests requiring a live XMPP server (ejabberd)",
+    "upstream: tests run inside vendor clones",
+    "scenario: known incompatibility regression tests",
+]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

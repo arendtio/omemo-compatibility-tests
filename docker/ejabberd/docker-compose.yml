@@ -1,0 +1,18 @@
+services:
+  ejabberd:
+    image: ghcr.io/processone/ejabberd:latest
+    container_name: omemo-interop-ejabberd
+    hostname: localhost
+    environment:
+      - CTL_ON_CREATE=register alice localhost alicepass ; register bob localhost bobpass ; register carol localhost carolpass
+    ports:
+      - "5222:5222"
+      - "5280:5280"
+    volumes:
+      - ./ejabberd.yml:/opt/ejabberd/conf/ejabberd.yml:ro
+    healthcheck:
+      test: ["CMD", "ejabberdctl", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
