@@ -119,7 +119,30 @@ jobs:
       - name: Vendor XML contract unit test
         run: cd interop/android && ./gradlew :conv-native:testDebugUnitTest --tests "eu.siacs.conversations.crypto.axolotl.ConversationsVendorXmlContractTest" --no-daemon -q
 
-  server-matrix-prosody:
+      - name: Build Smack wire peers (Siskin + Monal)
+        run: ./scripts/build-clients.sh
+
+      - name: Start ejabberd
+        run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
+
+      - name: Native Conversations vs Siskin wire matrix
+        run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-siskin --native-conversations
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+
+      - name: Native Conversations vs Monal wire matrix
+        run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-monal --native-conversations
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+
+      - name: Native cross-wire pytest
+        run: python3 -m pytest tests/wire/test_conversations_native_cross_wire.py -v -m native
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+
+      - name: Stop ejabberd
+        if: always()
+        run: docker compose -f docker/ejabberd/docker-compose.yml down
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

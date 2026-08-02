@@ -26,24 +26,40 @@ run_ctl() {
   fi
 }
 
+install_interop_config() {
+  # Debian/apt ejabberd reads /etc/ejabberd/ejabberd.yml — EJABBERD_CONFIG_PATH only affects ctl.
+  if [[ -d /etc/ejabberd ]] && command -v sudo >/dev/null 2>&1; then
+    sudo install -m 644 "$CONFIG" /etc/ejabberd/ejabberd.yml
+  fi
+}
+
+was_running=false
 if run_ctl status >/dev/null 2>&1; then
-  echo "ejabberd already running (interop config: $CONFIG)"
+  was_running=true
+fi
+
+install_interop_config
+
+if $was_running; then
+  echo "Restarting ejabberd with interop config: $CONFIG"
+  run_ctl restart
 else
   echo "Starting ejabberd with $CONFIG"
   rm -rf "${SPOOL:?}"/* 2>/dev/null || sudo rm -rf "${SPOOL:?}"/* 2>/dev/null || true
   run_ctl start
-  for _ in $(seq 1 30); do
-    if run_ctl status >/dev/null 2>&1; then
-      break
-    fi
-    sleep 1
-  done
-  if ! run_ctl status >/dev/null 2>&1; then
-    echo "ejabberd failed to start" >&2
-    exit 1
-  fi
-  echo "ejabberd ready"
 fi
+
+for _ in $(seq 1 30); do
+  if run_ctl status >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+if ! run_ctl status >/dev/null 2>&1; then
+  echo "ejabberd failed to start" >&2
+  exit 1
+fi
+echo "ejabberd ready (interop config: $CONFIG)"
 
 run_ctl register alice localhost alicepass 2>/dev/null || true
 run_ctl register bob localhost bobpass 2>/dev/null || true

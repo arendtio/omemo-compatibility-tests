@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 MATRIX = ROOT / "config" / "interop-matrix.yaml"
 CLIENTS_DIR = ROOT / "interop" / "clients"
 
+from omemo_interop.native_wire import popen_native_wire, run_native_wire
+
 
 def run(cmd: list[str], env: dict | None = None, timeout: int = 120, cwd: Path | None = None) -> int:
     print(f"$ {' '.join(cmd)}")
@@ -53,6 +55,87 @@ def build_clients(client_ids: set[str], matrix: dict) -> int:
         print("Gradle wrapper missing in interop/clients", file=sys.stderr)
         return 1
     return run([str(gradlew), *tasks, "-q"], cwd=CLIENTS_DIR)
+
+
+def wire_env() -> dict[str, str]:
+    return {
+        **os.environ,
+        "OMEMO_INTEROP_ROOT": str(ROOT),
+        "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto"),
+    }
+
+
+def use_native_wire(client_id: str, native_conversations: bool) -> bool:
+    return native_conversations and client_id == "conversations"
+
+
+def wait_boot(client_id: str, native_conversations: bool, short: bool = False) -> None:
+    if short and not use_native_wire(client_id, native_conversations):
+        time.sleep(1)
+    elif use_native_wire(client_id, native_conversations):
+        time.sleep(35)
+    else:
+        time.sleep(12)
+
+
+def invoke_client(
+    client_id: str,
+    matrix: dict,
+    mode: str,
+    jid: str,
+    password: str,
+    native_conversations: bool,
+    peer: str | None = None,
+    send: str | None = None,
+    expect: str | None = None,
+    data_dir: Path | None = None,
+) -> int:
+    d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
+    d.mkdir(parents=True, exist_ok=True)
+    if use_native_wire(client_id, native_conversations):
+        print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
+        return run_native_wire(
+            mode, jid, password, d, peer=peer, send=send, expect=expect,
+        )
+    return run_client(
+        client_id, matrix, mode, jid, password, peer, send, expect, d,
+    )
+
+
+def spawn_client(
+    client_id: str,
+    matrix: dict,
+    mode: str,
+    jid: str,
+    password: str,
+    native_conversations: bool,
+    peer: str | None = None,
+    send: str | None = None,
+    expect: str | None = None,
+    data_dir: Path | None = None,
+) -> subprocess.Popen:
+    d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
+    d.mkdir(parents=True, exist_ok=True)
+    if use_native_wire(client_id, native_conversations):
+        print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
+        return popen_native_wire(
+            mode, jid, password, d, peer=peer, send=send, expect=expect,
+        )
+    launcher = client_launcher(client_id, matrix)
+    args = [
+        str(launcher),
+        "--mode", mode,
+        *(["--peer", peer] if peer else []),
+        *(["--send", send] if send else []),
+        *(["--expect", expect] if expect else []),
+        "--",
+        "--jid", jid,
+        "--password", password,
+        "--host", "127.0.0.1",
+        "--port", "5222",
+        "--data-dir", str(d),
+    ]
+    return subprocess.Popen(args, cwd=ROOT, env=wire_env())
 
 
 def run_client(
@@ -101,32 +184,23 @@ def run_client(
     return run(args, timeout=90)
 
 
-def scenario_bob_sends_alice_replies(left: str, right: str, matrix: dict) -> int:
+def scenario_bob_sends_alice_replies(
+    left: str, right: str, matrix: dict, native_conversations: bool = False,
+) -> int:
     """Bob (right) initiates; Alice (left) replies — tests reverse prekey handshake."""
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
     tag = f"{right}-to-{left}"
 
-    alice_proc = subprocess.Popen(
-        [
-            str(client_launcher(left, matrix)),
-            "--mode", "wait",
-            "--expect", f"hello-{tag}",
-            "--",
-            "--jid", alice_jid,
-            "--password", "alicepass",
-            "--host", "127.0.0.1",
-            "--port", "5222",
-            "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
-        ],
-        cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    alice_proc = spawn_client(
+        left, matrix, "wait", alice_jid, "alicepass", native_conversations,
+        expect=f"hello-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    time.sleep(12)
+    wait_boot(left, native_conversations)
 
-    rc = run_client(
-        right, matrix, "send",
-        bob_jid, "bobpass",
+    rc = invoke_client(
+        right, matrix, "send", bob_jid, "bobpass", native_conversations,
         peer=alice_jid,
         send=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -143,25 +217,14 @@ def scenario_bob_sends_alice_replies(left: str, right: str, matrix: dict) -> int
     if alice_rc != 0:
         return alice_rc
 
-    bob_proc = subprocess.Popen(
-        [
-            str(client_launcher(right, matrix)),
-            "--mode", "wait",
-            "--expect", f"reply-{tag}",
-            "--",
-            "--jid", bob_jid,
-            "--password", "bobpass",
-            "--host", "127.0.0.1",
-            "--port", "5222",
-            "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
-        ],
-        cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    bob_proc = spawn_client(
+        right, matrix, "wait", bob_jid, "bobpass", native_conversations,
+        expect=f"reply-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    time.sleep(1)
-    rc = run_client(
-        left, matrix, "send",
-        alice_jid, "alicepass",
+    wait_boot(right, native_conversations)
+    rc = invoke_client(
+        left, matrix, "send", alice_jid, "alicepass", native_conversations,
         peer=bob_jid,
         send=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -176,32 +239,23 @@ def scenario_bob_sends_alice_replies(left: str, right: str, matrix: dict) -> int
         return 1
 
 
-def scenario_unicode_body_roundtrip(left: str, right: str, matrix: dict) -> int:
+def scenario_unicode_body_roundtrip(
+    left: str, right: str, matrix: dict, native_conversations: bool = False,
+) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
     tag = f"{left}-to-{right}"
     hello = f"hello-unicode-🧪-{tag}"
     reply = f"reply-unicode-🧪-{tag}"
 
-    bob_proc = subprocess.Popen(
-        [
-            str(client_launcher(right, matrix)),
-            "--mode", "wait",
-            "--expect", hello,
-            "--",
-            "--jid", bob_jid,
-            "--password", "bobpass",
-            "--host", "127.0.0.1",
-            "--port", "5222",
-            "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
-        ],
-        cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    bob_proc = spawn_client(
+        right, matrix, "wait", bob_jid, "bobpass", native_conversations,
+        expect=hello,
+        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    time.sleep(12)
-    rc = run_client(
-        left, matrix, "send",
-        alice_jid, "alicepass",
+    wait_boot(right, native_conversations)
+    rc = invoke_client(
+        left, matrix, "send", alice_jid, "alicepass", native_conversations,
         peer=bob_jid,
         send=hello,
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -217,25 +271,14 @@ def scenario_unicode_body_roundtrip(left: str, right: str, matrix: dict) -> int:
     if bob_rc != 0:
         return bob_rc
 
-    alice_proc = subprocess.Popen(
-        [
-            str(client_launcher(left, matrix)),
-            "--mode", "wait",
-            "--expect", reply,
-            "--",
-            "--jid", alice_jid,
-            "--password", "alicepass",
-            "--host", "127.0.0.1",
-            "--port", "5222",
-            "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
-        ],
-        cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    alice_proc = spawn_client(
+        left, matrix, "wait", alice_jid, "alicepass", native_conversations,
+        expect=reply,
+        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    time.sleep(1)
-    rc = run_client(
-        right, matrix, "send",
-        bob_jid, "bobpass",
+    wait_boot(left, native_conversations)
+    rc = invoke_client(
+        right, matrix, "send", bob_jid, "bobpass", native_conversations,
         peer=alice_jid,
         send=reply,
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -250,10 +293,12 @@ def scenario_unicode_body_roundtrip(left: str, right: str, matrix: dict) -> int:
         return 1
 
 
-def scenario_repeated_session_messages(left: str, right: str, matrix: dict) -> int:
+def scenario_repeated_session_messages(
+    left: str, right: str, matrix: dict, native_conversations: bool = False,
+) -> int:
     """Two roundtrips on the same OMEMO stores — second leg uses established sessions."""
     for n in (1, 2):
-        rc = scenario_alice_sends_bob_replies(left, right, matrix)
+        rc = scenario_alice_sends_bob_replies(left, right, matrix, native_conversations)
         if rc != 0:
             print(f"Repeated session leg {n} failed")
             return rc
@@ -269,31 +314,21 @@ SCENARIO_HANDLERS = {
 }
 
 
-def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int:
+def scenario_alice_sends_bob_replies(
+    left: str, right: str, matrix: dict, native_conversations: bool = False,
+) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
     tag = f"{left}-to-{right}"
 
-    bob_proc = subprocess.Popen(
-        [
-            str(client_launcher(right, matrix)),
-            "--mode", "wait",
-            "--expect", f"hello-{tag}",
-            "--",
-            "--jid", bob_jid,
-            "--password", "bobpass",
-            "--host", "127.0.0.1",
-            "--port", "5222",
-            "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
-        ],
-        cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    bob_proc = spawn_client(
+        right, matrix, "wait", bob_jid, "bobpass", native_conversations,
+        expect=f"hello-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    time.sleep(12)
-
-    rc = run_client(
-        left, matrix, "send",
-        alice_jid, "alicepass",
+    wait_boot(right, native_conversations)
+    rc = invoke_client(
+        left, matrix, "send", alice_jid, "alicepass", native_conversations,
         peer=bob_jid,
         send=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -310,25 +345,14 @@ def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int
     if bob_rc != 0:
         return bob_rc
 
-    alice_proc = subprocess.Popen(
-        [
-            str(client_launcher(left, matrix)),
-            "--mode", "wait",
-            "--expect", f"reply-{tag}",
-            "--",
-            "--jid", alice_jid,
-            "--password", "alicepass",
-            "--host", "127.0.0.1",
-            "--port", "5222",
-            "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
-        ],
-        cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
+    alice_proc = spawn_client(
+        left, matrix, "wait", alice_jid, "alicepass", native_conversations,
+        expect=f"reply-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    time.sleep(1)
-    rc = run_client(
-        right, matrix, "send",
-        bob_jid, "bobpass",
+    wait_boot(left, native_conversations)
+    rc = invoke_client(
+        right, matrix, "send", bob_jid, "bobpass", native_conversations,
         peer=alice_jid,
         send=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -387,12 +411,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run OMEMO client interop matrix")
     parser.add_argument("--pair", default="conversations-vs-siskin")
     parser.add_argument("--build", action="store_true", help="Build client runners first")
+    parser.add_argument(
+        "--native-conversations",
+        action="store_true",
+        help="Use vendor AxolotlService wire for conversations (not Smack proxy)",
+    )
     args = parser.parse_args()
 
     with open(MATRIX, encoding="utf-8") as f:
         matrix = yaml.safe_load(f)
 
-    pair = next(p for p in matrix["pairs"] if p["id"] == args.pair)
+    pairs = matrix.get("pairs", [])
+    pair = next((p for p in pairs if p["id"] == args.pair), None)
+    if pair is None:
+        print(f"Unknown pair: {args.pair}", file=sys.stderr)
+        return 1
+
+    native_conversations = args.native_conversations or bool(pair.get("native_left"))
     clients = {pair["left"], pair["right"]}
 
     os.environ.setdefault("OMEMO_XMPP_SECURITY", "auto")
@@ -402,8 +437,15 @@ def main() -> int:
 
     reset_localhost_users()
 
-    if args.build or not all(client_launcher(c, matrix).exists() for c in clients):
-        rc = build_clients(clients, matrix)
+    if native_conversations and not os.environ.get("ANDROID_HOME"):
+        print("ANDROID_HOME required for native Conversations wire", file=sys.stderr)
+        return 1
+
+    clients_to_build = {
+        c for c in clients if not use_native_wire(c, native_conversations)
+    }
+    if args.build or any(not client_launcher(c, matrix).exists() for c in clients_to_build):
+        rc = build_clients(clients_to_build, matrix)
         if rc != 0:
             return rc
 
@@ -413,7 +455,7 @@ def main() -> int:
         if handler is None:
             print(f"Unknown scenario: {scenario}")
             return 1
-        rc = handler(pair["left"], pair["right"], matrix)
+        rc = handler(pair["left"], pair["right"], matrix, native_conversations)
         if rc != 0:
             print(f"FAIL scenario {scenario}")
             return rc

@@ -1,5 +1,8 @@
 package eu.siacs.conversations.crypto.axolotl;
 
+import eu.siacs.conversations.entities.Account;
+import eu.siacs.conversations.entities.Contact;
+import eu.siacs.conversations.xmpp.Jid;
 import org.whispersystems.libsignal.IdentityKeyPair;
 import org.whispersystems.libsignal.InvalidKeyIdException;
 import org.whispersystems.libsignal.state.PreKeyBundle;
@@ -10,7 +13,7 @@ import org.whispersystems.libsignal.util.KeyHelper;
 import java.util.List;
 
 /** Seeds vendor {@link SQLiteAxolotlStore} like {@code AxolotlService} publish path. */
-final class NativeTestHelper {
+public final class NativeTestHelper {
 
     private NativeTestHelper() {}
 
@@ -42,5 +45,14 @@ final class NativeTestHelper {
     static void trustSession(SQLiteAxolotlStore store, XmppAxolotlSession session) {
         store.setFingerprintStatus(
                 session.getFingerprint(), FingerprintStatus.createActiveTrusted());
+        session.setTrust(FingerprintStatus.createActiveTrusted());
+    }
+
+    public static void trustPeerSessions(AxolotlService axolotl, Account account, Jid peer) {
+        Contact contact = new Contact(peer);
+        contact.setAccount(account);
+        for (XmppAxolotlSession session : axolotl.findSessionsForContact(contact)) {
+            session.setTrust(FingerprintStatus.createActiveTrusted());
+        }
     }
 }

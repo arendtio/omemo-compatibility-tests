@@ -2,6 +2,13 @@ plugins {
     id("com.android.library") version "8.7.3"
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("org.jxmpp:jxmpp-jid:1.0.3")
+        force("org.jxmpp:jxmpp-stringprep-libidn:1.0.3")
+    }
+}
+
 val repoRoot = rootProject.file("../../").canonicalFile
 val convRoot = repoRoot.resolve("vendor/conversations")
 val convClasses =
@@ -85,8 +92,9 @@ dependencies {
     testImplementation("androidx.work:work-runtime:2.11.2")
     testImplementation("org.minidns:minidns-client:1.1.1")
     testImplementation("org.minidns:minidns-dnssec:1.1.1")
-    testImplementation("org.jxmpp:jxmpp-jid:1.1.0")
-    testImplementation("org.jxmpp:jxmpp-stringprep-libidn:1.1.0")
+    // Smack 4.4.8 BindIQProvider calls JidCreate.entityFullFrom(String) — present in jxmpp 1.0.x only.
+    testImplementation("org.jxmpp:jxmpp-jid:1.0.3")
+    testImplementation("org.jxmpp:jxmpp-stringprep-libidn:1.0.3")
     testImplementation("org.bouncycastle:bcmail-jdk18on:1.84")
     testImplementation("org.conscrypt:conscrypt-android:2.5.3")
     testImplementation("org.immutables:value-annotations:2.12.2")

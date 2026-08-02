@@ -1,5 +1,6 @@
 package eu.siacs.conversations.wire;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -8,8 +9,10 @@ import android.content.Context;
 import androidx.test.core.app.ApplicationProvider;
 
 import eu.siacs.conversations.crypto.axolotl.AxolotlService;
+import eu.siacs.conversations.crypto.axolotl.NativeTestHelper;
 import eu.siacs.conversations.crypto.axolotl.XmppAxolotlMessage;
 import eu.siacs.conversations.entities.Account;
+import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.generator.MessageGenerator;
@@ -18,12 +21,11 @@ import eu.siacs.conversations.services.WireStubConnectionService;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.manager.PepManager;
+import eu.siacs.conversations.xmpp.manager.RosterManager;
 import im.conversations.android.xmpp.model.axolotl.Encrypted;
-import eu.siacs.conversations.entities.Message;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -159,10 +161,22 @@ public final class NativeWireClient {
 
         axolotl = new AxolotlService(account, wireService);
         XmppConnection xmppConnection = mock(XmppConnection.class);
+        XmppConnection.Features features = mock(XmppConnection.Features.class);
         PepManager pepManager = mock(PepManager.class);
+        RosterManager rosterManager = mock(RosterManager.class);
         when(pepManager.isAvailable()).thenReturn(true);
+        when(features.pepPublishOptions()).thenReturn(true);
+        when(xmppConnection.getFeatures()).thenReturn(features);
         when(xmppConnection.getManager(PepManager.class)).thenReturn(pepManager);
+        when(xmppConnection.getManager(RosterManager.class)).thenReturn(rosterManager);
         when(xmppConnection.getAxolotlService()).thenReturn(axolotl);
+        when(rosterManager.getContact(any(Jid.class)))
+                .thenAnswer(
+                        inv -> {
+                            Contact contact = new Contact(inv.getArgument(0));
+                            contact.setAccount(account);
+                            return contact;
+                        });
         account.setXmppConnection(xmppConnection);
 
         axolotl.onAdvancedStreamFeaturesAvailable(account);
@@ -195,10 +209,10 @@ public final class NativeWireClient {
     }
 
     public void sendEncrypted(EntityBareJid peer, String body) throws Exception {
-        preparePeer(peer);
         Conversation conv =
                 new Conversation(peer.getLocalpart().toString(), account, Jid.of(peer.toString()), Conversation.MODE_SINGLE);
         wireService.databaseBackend.createConversation(conv);
+        preparePeer(peer, conv);
         Message message = new Message(conv, body, Message.ENCRYPTION_AXOLOTL);
         message.setCounterpart(Jid.of(peer.toString()));
 
@@ -220,7 +234,7 @@ public final class NativeWireClient {
                 account, generator.generateAxolotlChat(message, encrypted));
     }
 
-    private void preparePeer(EntityBareJid peer) throws Exception {
+    private void preparePeer(EntityBareJid peer, Conversation conv) throws Exception {
         Roster roster = Roster.getInstanceFor(connection);
         if (!roster.contains(peer)) {
             roster.createEntry(peer, peer.getLocalpart().toString(), null);
@@ -231,12 +245,32 @@ public final class NativeWireClient {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
         while (System.nanoTime() < deadline) {
             if (!axolotl.hasPendingKeyFetches(List.of(peerJid))) {
-                return;
+                break;
             }
             Thread.sleep(500);
             axolotl.fetchDeviceIds(peerJid);
         }
-        throw new IllegalStateException("Timeout waiting for OMEMO sessions with " + peer);
+        if (axolotl.hasPendingKeyFetches(List.of(peerJid))) {
+            throw new IllegalStateException("Timeout waiting for OMEMO device list for " + peer);
+        }
+        if (axolotl.isPepBroken()) {
+            throw new IllegalStateException("Vendor PEP marked broken for " + peer);
+        }
+        if (axolotl.hasEmptyDeviceList(peerJid)) {
+            throw new IllegalStateException("No OMEMO devices published for " + peer);
+        }
+        axolotl.createSessionsIfNeeded(conv);
+        deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
+        while (System.nanoTime() < deadline) {
+            if (!axolotl.hasPendingKeyFetches(List.of(peerJid))) {
+                break;
+            }
+            Thread.sleep(500);
+        }
+        if (axolotl.hasPendingKeyFetches(List.of(peerJid))) {
+            throw new IllegalStateException("Timeout waiting for OMEMO sessions with " + peer);
+        }
+        NativeTestHelper.trustPeerSessions(axolotl, account, peerJid);
     }
 
     public boolean awaitBody(String expected, long timeoutSeconds) throws InterruptedException {

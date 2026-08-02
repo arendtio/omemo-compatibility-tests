@@ -3,6 +3,7 @@ package eu.siacs.conversations.wire;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
+import eu.siacs.conversations.crypto.axolotl.AxolotlService;
 import im.conversations.android.xmpp.StreamElementWriter;
 import im.conversations.android.xmpp.model.StreamElement;
 import im.conversations.android.xml.XmlElementReader;
@@ -24,7 +25,18 @@ public final class SmackXmlBridge {
     }
 
     public static Stanza toSmackStanza(StreamElement element) throws Exception {
-        return PacketParserUtils.parseStanza(toXml(element));
+        String xml = toXml(element);
+        if (xml.startsWith("<message")
+                && !xml.contains("jabber:client")) {
+            xml = xml.replaceFirst("<message", "<message xmlns='jabber:client'");
+        }
+        xml = xml.replace(
+                "<payload>",
+                "<payload xmlns='" + AxolotlService.PEP_PREFIX + "'>");
+        if (System.getenv("WIRE_DEBUG") != null) {
+            System.err.println("SMACK_XML=" + xml.substring(0, Math.min(2000, xml.length())));
+        }
+        return PacketParserUtils.parseStanza(xml);
     }
 
   @SuppressWarnings("unchecked")

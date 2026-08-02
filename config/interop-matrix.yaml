@@ -26,6 +26,24 @@ pairs:
       - unicode_body_roundtrip
       - repeated_session_messages
 
+  - id: conversations-native-vs-siskin
+    description: Conversations vendor AxolotlService wire vs Siskin Smack proxy
+    left: conversations
+    right: siskin_im
+    native_left: true
+    scenarios:
+      - alice_sends_bob_replies
+      - unicode_body_roundtrip
+
+  - id: conversations-native-vs-monal
+    description: Conversations vendor AxolotlService wire vs Monal Smack proxy
+    left: conversations
+    right: monal
+    native_left: true
+    scenarios:
+      - alice_sends_bob_replies
+      - unicode_body_roundtrip
+
   - id: conversations-vs-conversations
     description: Sanity check — two sessions using Conversations implementation
     left: conversations

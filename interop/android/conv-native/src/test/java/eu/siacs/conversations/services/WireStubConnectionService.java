@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import eu.siacs.conversations.AppSettings;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.generator.IqGenerator;
+import eu.siacs.conversations.wire.PubsubResponseFixer;
 import eu.siacs.conversations.wire.SmackXmlBridge;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import im.conversations.android.xmpp.model.stanza.Message;
@@ -57,9 +58,27 @@ public class WireStubConnectionService extends XmppConnectionService {
         try {
             Stanza request = SmackXmlBridge.toSmackStanza(packet);
             if (request instanceof org.jivesoftware.smack.packet.IQ iqRequest) {
+                if (!iqRequest.hasStanzaIdSet()) {
+                    iqRequest.setStanzaId();
+                }
+                if (System.getenv("WIRE_DEBUG") != null) {
+                    System.err.println("IQ req XML: " + request.toXML());
+                }
                 Stanza response =
-                        smackConnection.createStanzaCollectorAndSend(iqRequest).nextResultOrThrow();
-                Iq vendorResponse = SmackXmlBridge.fromSmackStanza(response, Iq.class);
+                        smackConnection
+                                .createStanzaCollectorAndSend(iqRequest)
+                                .nextResult(smackConnection.getReplyTimeout());
+                if (response == null) {
+                    if (callback != null) {
+                        callback.accept(Iq.TIMEOUT);
+                    }
+                    return;
+                }
+                if (System.getenv("WIRE_DEBUG") != null) {
+                    System.err.println("IQ resp XML: " + response.toXML());
+                }
+                Stanza normalized = PubsubResponseFixer.latestItemOnly(response);
+                Iq vendorResponse = SmackXmlBridge.fromSmackStanza(normalized, Iq.class);
                 if (callback != null) {
                     callback.accept(vendorResponse);
                 }

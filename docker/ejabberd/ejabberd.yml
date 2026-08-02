@@ -86,8 +86,10 @@ modules:
       # See https://github.com/processone/ejabberd/issues/2425
       "eu.siacs.conversations.axolotl.*":
         access_model: open
+        max_items: 1
       "urn:xmpp:omemo:2.*":
         access_model: open
+        max_items: 1
 
   mod_mam:
     db_type: mnesia
@@ -100,7 +102,7 @@ modules:
     access_persistent: local
     access_admin: local
 
-  mod_carbon: {}
+  mod_carboncopy: {}
   mod_client_state: {}
 
 auth_method: internal
