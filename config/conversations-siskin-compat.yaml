@@ -1,111 +1,126 @@
-# Conversations (Android) vs Siskin IM legacy OMEMO compatibility surface.
-# Namespace: eu.siacs.conversations.axolotl (not urn:xmpp:omemo:2).
-#
-# Sources:
-#   vendor/conversations — AxolotlService, XmppAxolotlMessage, Config
-#   vendor/siskin_im + tigase/MartinOMEMO — OMEMOModule.swift
-# Wire runners today use Smack VAxolotl proxies; protocol tests use python-oldmemo
-# as the Conversations wire-format reference implementation.
+# Conversations vs Siskin — compatibility audit registry
+# Methodology: requirements/technical/02-omemo-audit-methodology.md
+# Pins: config/audit-source-pins.yaml
 
-gaps:
+methodology: control_flow_and_wire_format
+
+# Wire format: clients agree on legacy axolotl XML/crypto.
+wire_format:
+  aligned: true
+  namespace: eu.siacs.conversations.axolotl
+  note: >
+    Same PEP nodes, AES-128-GCM, 12-byte IV, 16-byte key + 16-byte tag in ratchet envelope.
+    Real decrypt failures are usually partial send or stale PEP, not codec mismatch.
+
+findings:
+  - id: partial_send_conversations
+    severity: P0
+    aligned: false
+    category: control_flow
+    title: Conversations may omit keys without failing send
+    symptom: '"Provides keys: []" or missing device on receive'
+    source_paths:
+      - vendor/conversations/src/main/java/eu/siacs/conversations/crypto/axolotl/AxolotlService.java
+      - vendor/conversations/src/main/java/eu/siacs/conversations/crypto/axolotl/XmppAxolotlMessage.java
+    pattern: "addDevice() ignores null from processSending(); buildHeader() returns true"
+    minimal_fix: "Collect expected remote devices; fail send if any addDevice fails"
+    linked_issues:
+      - https://github.com/tigase/siskin-im/issues/162
+    tests:
+      - tests/compatibility/test_source_control_flow_audit.py::test_conversations_partial_send_pattern_documented
+      - tests/compatibility/test_audit_regression_fixtures.py::test_partial_coverage_message_rejected_by_harness
+
+  - id: partial_send_siskin
+    severity: P0
+    aligned: false
+    category: control_flow
+    title: MartinOMEMO drops failed session ciphers from header
+    symptom: Message encrypts for subset of devices; peers cannot decrypt
+    source_paths:
+      - vendor/MartinOMEMO/Sources/MartinOMEMO/OMEMOModule.swift
+    pattern: "_encode maps encrypt failures to nil and filters; addresses() swallows PEP failure"
+    minimal_fix: "Throw on encrypt failure; propagate PEP errors; verify expected ⊆ encoded"
+    linked_issues:
+      - https://github.com/tigase/siskin-im/issues/162
+    tests:
+      - tests/compatibility/test_source_control_flow_audit.py::test_siskin_partial_send_pattern_documented
+      - tests/compatibility/test_source_control_flow_audit.py::test_siskin_pep_failure_swallowed_pattern
+
+  - id: siskin_bundle_before_announce
+    severity: P1
+    aligned: false
+    category: control_flow
+    title: Device may be announced when bundle publish path treats errors as success
+    source_paths:
+      - vendor/MartinOMEMO/Sources/MartinOMEMO/OMEMOModule.swift
+    pattern: "publishDeviceBundleIfNeeded non-item_not_found errors return without throw"
+    minimal_fix: "Propagate XMPP errors; reconfigure bundle node on precondition-not-met"
+    tests:
+      - tests/compatibility/test_source_control_flow_audit.py::test_siskin_bundle_publish_error_handling
+
+  - id: siskin_trust_callback_always_true
+    severity: P1
+    category: security
+    title: libsignal isTrusted always returns true
+    aligned: false
+    source_paths:
+      - vendor/siskin_im/SiskinIM/database/DBOMEMOStore.swift
+    pattern: "isTrusted returns true unconditionally"
+    minimal_fix: "Map DB identity status; reject compromised / key-change"
+    tests:
+      - tests/compatibility/test_source_control_flow_audit.py::test_siskin_istrusted_always_true
+      - tests/compatibility/test_conversations_siskin_protocol.py::test_trust_model_difference_documented
+
   - id: auth_tag_in_ratchet_key
-    title: AES-GCM auth tag carried inside ratchet-decrypted key material
-    conversations: "PUT_AUTH_TAG_INTO_KEY=true; payload decrypt requires 32-byte key (16 key + 16 tag)"
-    siskin: "MartinOMEMO combines key(16)+authTag(16) before libsignal encrypt"
-    risk: "Clients < Conversations 1.16 cannot decrypt modern payloads"
+    severity: info
+    category: wire_format
     aligned: true
     tests:
       - tests/compatibility/test_conversations_siskin_protocol.py::test_auth_tag_in_key_roundtrip
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_payload_ciphertext_excludes_gcm_tag
 
-  - id: prekey_attribute_values
-    title: prekey attribute on <key> elements
-    conversations: "getAttributeAsBoolean accepts true and 1"
-    siskin: "accepts prekey=true or prekey=1"
-    risk: low
+  - id: prekey_attribute_variants
+    severity: info
+    category: wire_format
     aligned: true
+    note: "Receivers accept true/1; false/0/missing mean SignalMessage path"
     tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_prekey_attribute_one_decrypts_like_true
+      - tests/compatibility/test_audit_regression_fixtures.py::test_prekey_attribute_variants_on_parse
 
-  - id: key_transport_empty_payload
-    title: Session-establishment messages without <payload>
-    conversations: "AUTOMATICALLY_COMPLETE_SESSIONS sends key-transport; decrypt skips payload"
-    siskin: "decode returns successTransportKey when payload missing"
-    risk: "Broken sessions if key-transport mishandled"
+  - id: muc_same_rid_multiple_keys
+    severity: P1
+    category: control_flow
     aligned: true
+    note: "Conversations and MartinOMEMO try all keys with matching rid; Monal uses findFirst (see monal audit)"
     tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_key_transport_without_payload_then_chat
-      - tests/compatibility/test_conversations_siskin_wire.py::test_wire_session_survives_after_first_message
+      - tests/compatibility/test_audit_regression_fixtures.py::test_multiple_keys_same_rid_collects_candidates
 
-  - id: iv_length_12_bytes
-    title: 12-byte AES-GCM IV (Conversations >= 2.7.0)
-    conversations: "generateIv() uses 12 random bytes"
-    siskin: "12-byte IV in OMEMOModule encode/decode"
-    risk: "16-byte legacy IVs break decrypt"
+  - id: pep_open_access
+    severity: P2
+    category: operational
     aligned: true
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_iv_on_wire_is_twelve_bytes
-
-  - id: omemo_padding_disabled
-    title: OMEMO random padding disabled
-    conversations: "OMEMO_PADDING=false"
-    siskin: "no padding layer in MartinOMEMO payload path"
-    risk: low
-    aligned: true
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_unicode_plaintext_without_padding
-
-  - id: pep_node_naming
-    title: PEP node names and item ids
-    conversations: "devicelist, bundles:<id>, item id current"
-    siskin: "same node names and current item id"
-    risk: "Wrong node names break bundle fetch"
-    aligned: true
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_pep_node_names_match_conversations
-
-  - id: open_pep_access
-    title: Device lists and bundles must be openly readable
-    conversations: "PublishOptions.openAccess() when supported"
-    siskin: "pubsub access_model open on publish"
-    risk: "Whitelist PEP blocks cross-client decrypt (Monal-class bugs)"
-    aligned: true
-    mitigated_by: docker/ejabberd/ejabberd.yml force_node_config
+    mitigated_by: docker/ejabberd/ejabberd.yml
     tests:
       - tests/compatibility/test_conversations_siskin_wire.py::test_wire_cross_fetch_without_prior_roster
 
-  - id: file_vs_message_key_sizes
-    title: Attachment AES-GCM key sizes differ from chat messages
-    conversations: "16-byte message keys; aesgcm:// uses 32-byte file keys"
-    siskin: "same aesgcm scheme with 32-byte file keys"
-    risk: "Wrong key size breaks attachment decrypt only"
-    aligned: true
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_documented_file_key_size_differs_from_message
-
-  - id: trust_model
-    title: Identity trust enforcement
-    conversations: "trustedAndActive gating on send; TOFU in UI"
-    siskin: "DBOMEMOStore.isTrusted() always true; UI-level trust only"
-    risk: "Siskin sends to untrusted fingerprints; Conversations may refuse"
-    aligned: false
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_trust_model_difference_documented
-
-  - id: muc_omemo_policy
-    title: MUC OMEMO availability rules
-    conversations: "OMEMO in MUC with member fan-out"
-    siskin: "OMEMO only when membersOnly + nonAnonymous; per-member 1:1 encrypt"
-    risk: "Public MUC OMEMO works in Conversations but not Siskin"
-    aligned: false
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_muc_policy_difference_documented
-
-  - id: omemo2_namespace
-    title: OMEMO 2 namespace support
-    conversations: "legacy axolotl only in vendor tree"
-    siskin: "legacy axolotl only; no urn:xmpp:omemo:2"
-    risk: none for 1:1 legacy interop
-    aligned: true
-    tests:
-      - tests/compatibility/test_conversations_siskin_protocol.py::test_legacy_message_uses_axolotl_namespace_only
+regression_matrix:
+  # From Kompatibilitätsaudit § Kleine gemeinsame Regressionstest-Suite
+  - id: prekey_variants
+    covered: true
+  - id: bundle_not_ready_no_partial_send
+    covered: partial
+    note: harness rejects; vendor static audit documents gap
+  - id: one_cipher_fails_no_wire_message
+    covered: partial
+  - id: foreign_jid_same_device_id
+    covered: false
+    note: Monal-specific; add when monal vendored
+  - id: muc_duplicate_rid
+    covered: true
+  - id: pep_precondition_not_met_retry
+    covered: static_only
+  - id: device_list_fetch_error_not_empty
+    covered: static_only
+  - id: compromised_identity_blocked
+    covered: static_only
+  - id: carbon_mam_duplicate
+    covered: false

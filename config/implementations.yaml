@@ -68,6 +68,13 @@ implementations:
     namespace: eu.siacs.conversations.axolotl
     wire_runner: monal_family
 
+  - id: martin_omemo
+    description: Tigase MartinOMEMO SPM module (Siskin crypto stack) — audit pin
+    repo: https://github.com/tigase/MartinOMEMO.git
+    branch: devel
+    type: library
+    optional: true
+
   # OMEMO 2 backends — optional, not used in default interop matrix
   - id: python-twomemo
     description: OMEMO 2 (urn:xmpp:omemo:2) — excluded from default interop

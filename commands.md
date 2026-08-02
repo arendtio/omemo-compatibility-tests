@@ -6,7 +6,7 @@
 
 - `pip install -e ".[dev]"` — Install suite dependencies
 - `python3 scripts/download-implementations.py` — Clone/update vendor trees
-- `python3 scripts/download-implementations.py --ref conversations=2.20.1` — Pin client version
+- `python3 scripts/download-implementations.py --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e` — Audit-pinned MartinOMEMO for static tests
 - `./scripts/build-clients.sh` — Build Conversations + Monal wire runners (JDK 17+)
 
 ## Test Commands
@@ -17,7 +17,8 @@
 - `./scripts/run-suite.sh` — Download + upstream + legacy tests
 - `./scripts/run-suite.sh --wire` — Includes client matrix over ejabberd
 - `python3 scripts/run-scenario.py scenarios/legacy/full_conversation.yaml` — Multi-message scenario
-- `python3 -m pytest tests/compatibility/ -v -m compatibility` — Conversations vs Siskin protocol alignment tests
+- `python3 -m pytest tests/compatibility/ -v -m compatibility` — Conversations vs Siskin protocol + wire tests
+- `python3 -m pytest tests/compatibility/ -v -m audit` — Static control-flow audit (pinned vendor source)
 - `python3 scripts/run-interop-matrix.py --pair conversations-vs-siskin --build` — Conversations vs Siskin IM wire matrix
 
 ## Docker

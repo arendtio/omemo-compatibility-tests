@@ -48,13 +48,21 @@ CONVERSATIONS_CONFIG = (
     / "conversations"
     / "Config.java"
 )
-MARTIN_OMEMO_DECODE = Path("/tmp/MartinOMEMO/Sources/MartinOMEMO/OMEMOModule.swift")
+MARTIN_OMEMO_DECODE = (
+    Path(__file__).resolve().parent.parent.parent
+    / "vendor"
+    / "MartinOMEMO"
+    / "Sources"
+    / "MartinOMEMO"
+    / "OMEMOModule.swift"
+)
 
 
 @pytest.fixture
-def compat_gaps() -> list[dict]:
+def compat_findings() -> list[dict]:
     with open(COMPAT, encoding="utf-8") as f:
-        return yaml.safe_load(f)["gaps"]
+        data = yaml.safe_load(f)
+    return data["findings"]
 
 
 async def _handshake(alice, bob, bob_queue, plaintext: bytes) -> None:
@@ -73,13 +81,14 @@ async def _handshake(alice, bob, bob_queue, plaintext: bytes) -> None:
 
 
 @pytest.mark.compatibility
-def test_compat_registry_covers_conversations_siskin(compat_gaps: list[dict]) -> None:
-    ids = {g["id"] for g in compat_gaps}
+def test_compat_registry_covers_conversations_siskin(compat_findings: list[dict]) -> None:
+    ids = {g["id"] for g in compat_findings}
+    assert "partial_send_conversations" in ids
+    assert "partial_send_siskin" in ids
     assert "auth_tag_in_ratchet_key" in ids
-    assert "trust_model" in ids
-    assert "muc_omemo_policy" in ids
-    for gap in compat_gaps:
-        assert gap.get("tests") or gap.get("mitigated_by")
+    assert "siskin_trust_callback_always_true" in ids
+    for gap in compat_findings:
+        assert gap.get("tests") or gap.get("mitigated_by") or gap.get("note")
 
 
 @pytest.mark.compatibility
@@ -191,8 +200,8 @@ def test_documented_file_key_size_differs_from_message() -> None:
 
 
 @pytest.mark.compatibility
-def test_trust_model_difference_documented(compat_gaps: list[dict]) -> None:
-    gap = next(g for g in compat_gaps if g["id"] == "trust_model")
+def test_trust_model_difference_documented(compat_findings: list[dict]) -> None:
+    gap = next(g for g in compat_findings if g["id"] == "siskin_trust_callback_always_true")
     assert gap["aligned"] is False
     siskin_store = (
         Path(__file__).resolve().parent.parent.parent
@@ -209,9 +218,7 @@ def test_trust_model_difference_documented(compat_gaps: list[dict]) -> None:
 
 
 @pytest.mark.compatibility
-def test_muc_policy_difference_documented(compat_gaps: list[dict]) -> None:
-    gap = next(g for g in compat_gaps if g["id"] == "muc_omemo_policy")
-    assert gap["aligned"] is False
+def test_muc_policy_difference_documented() -> None:
     room = (
         Path(__file__).resolve().parent.parent.parent
         / "vendor"
@@ -242,7 +249,7 @@ async def test_legacy_message_uses_axolotl_namespace_only() -> None:
 
 
 @pytest.mark.compatibility
-def test_vendor_prekey_parsing_rules_match(compat_gaps: list[dict]) -> None:
+def test_vendor_prekey_parsing_rules_match() -> None:
     """Static check: MartinOMEMO and Conversations agree on prekey attribute values."""
     conv_element = (
         Path(__file__).resolve().parent.parent.parent

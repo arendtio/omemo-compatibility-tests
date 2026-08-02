@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from typing import Final
 
 import oldmemo
+import oldmemo.etree
 
 NS: Final = f"{{{oldmemo.oldmemo.NAMESPACE}}}"
 

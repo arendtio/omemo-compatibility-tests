@@ -36,6 +36,7 @@ markers = [
     "upstream: tests run inside vendor clones",
     "scenario: known incompatibility regression tests",
     "compatibility: Conversations vs Siskin (and related) alignment tests",
+    "audit: static control-flow audits from pinned vendor source",
     "omemo2: OMEMO 2 / twomemo tests (excluded from default legacy interop)",
 ]
 testpaths = ["tests"]

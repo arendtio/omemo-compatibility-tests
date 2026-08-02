@@ -1,0 +1,26 @@
+# Pinned vendor revisions for static OMEMO compatibility audits.
+# Match these when reproducing audit findings; wire runners may use different SHAs.
+
+audits:
+  conversations_siskin_monal_2026-08-02:
+    date: "2026-08-02"
+    document: uploads/xmpp-omemo-kompatibilitaetsaudit-1_9c8d.md
+    clients:
+      conversations:
+        version: "2.20.1"
+        commit: fbc0059a4489ee5dae180a3634c1f16b9cee12bb
+        path: vendor/conversations
+      siskin_im:
+        version: "7.4.1-b4"
+        commit: d77818f97597e0ea12c4004b91851776ab71e3b1
+        path: vendor/siskin_im
+      martin_omemo:
+        version: "devel snapshot"
+        commit: 2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+        path: vendor/MartinOMEMO
+        note: "Siskin pins moving branch devel; clone explicitly for audit"
+      monal:
+        version: "6.4.21"
+        commit: null
+        path: vendor/monal
+        note: "Optional; not in default download set"

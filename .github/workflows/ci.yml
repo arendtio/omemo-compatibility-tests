@@ -25,7 +25,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Download implementations
-        run: python3 scripts/download-implementations.py --skip-optional
+        run: python3 scripts/download-implementations.py --skip-optional --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
 
       - name: Upstream unit tests
         run: python3 scripts/run-upstream-tests.py
@@ -54,7 +54,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Download implementations
-        run: python3 scripts/download-implementations.py --skip-optional
+        run: python3 scripts/download-implementations.py --skip-optional --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
 
       - name: Build wire clients
         run: ./scripts/build-clients.sh
