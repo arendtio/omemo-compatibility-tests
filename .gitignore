@@ -1,5 +1,6 @@
 vendor/
 tmp/
+.android-sdk/
 .gradle/
 **/build/
 .pytest_cache/

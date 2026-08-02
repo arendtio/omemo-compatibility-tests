@@ -1,22 +1,28 @@
 # Conversations Android crypto bridge (REAL vendor axolotl code)
 
-This module compiles `vendor/conversations` axolotl sources and exposes a Gradle
-task for wire-level interop. Requires Android SDK + `ANDROID_HOME`.
+This module compiles `vendor/conversations` axolotl sources and runs Robolectric
+tests against `XmppAxolotlMessage`, `XmppAxolotlSession`, and `SQLiteAxolotlStore`.
 
-## Status
+Requires Android SDK + `ANDROID_HOME`.
 
-- Vendor verification: `verifyConversationsVendor` in `interop/clients/conversations`
-- Full Robolectric wire bridge: requires `ANDROID_HOME` (see `settings.gradle.kts`)
+## Proof status
 
-When `ANDROID_HOME` is unset, the bridge project configures but wire tests skip.
+| Client | Native crypto proof | Wire matrix |
+|--------|---------------------|-------------|
+| Conversations | **Green** — `conv-native` Robolectric tests | Smack proxy in `interop/clients`; native XMPP wire pending |
+| Siskin IM | Audit + static tests; MartinOMEMO Swift needs macOS | Smack proxy (`monal_family` runner) |
+| Monal | Audit + static tests; MLOMEMO/ObjC needs macOS | Smack proxy (`monal_native` runner) |
 
-## Goal
+## Commands
 
-Encrypt/decrypt using `XmppAxolotlMessage` / `AxolotlService` from the checked-out
-Conversations tree, with Smack used only as XMPP transport.
+```bash
+export ANDROID_HOME=...
+./scripts/build-conversations-native.sh
+cd interop/android && ./gradlew :conv-native:conversationsCryptoWire -PwireMode=local_roundtrip
+```
 
-## Siskin / MartinOMEMO
+## Siskin / MartinOMEMO / Monal
 
-Siskin IM uses Tigase Swift + MartinOMEMO on device. A Linux-native Swift bridge
-would compile `vendor/MartinOMEMO` with TigaseSwift — tracked separately from the
-Smack proxy in `interop/clients/siskin`.
+Siskin uses Tigase Swift + MartinOMEMO on device. Monal uses MLOMEMO + SignalProtocolC.
+Linux CI runs Smack proxies for wire interop; true Swift/ObjC native bridges are tracked
+in `interop/monal-native/README.md` and require a macOS agent.

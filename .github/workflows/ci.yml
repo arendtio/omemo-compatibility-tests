@@ -87,6 +87,35 @@ jobs:
         if: always()
         run: docker compose -f docker/ejabberd/docker-compose.yml down
 
+  native-conversations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install suite
+        run: pip install -e ".[dev]"
+
+      - name: Download Conversations vendor
+        run: python3 scripts/download-implementations.py --only conversations
+
+      - name: Conversations vendor axolotl native proof
+        run: ./scripts/build-conversations-native.sh
+
+      - name: Native pytest (Conversations)
+        run: python3 -m pytest tests/native/test_conversations_native_crypto.py -v -m native
+
   server-matrix-prosody:
     runs-on: ubuntu-latest
     steps:
