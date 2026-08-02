@@ -299,19 +299,13 @@ async def test_foreign_jid_same_device_id_distinct_sessions() -> None:
 
 @pytest.mark.compatibility
 @pytest.mark.audit
-def test_pep_precondition_retry_documented_in_static_audits() -> None:
-    """PEP precondition-not-met retry is covered by vendor static pattern tests."""
-    static = Path(__file__).resolve().parent / "test_source_control_flow_audit.py"
-    text = static.read_text(encoding="utf-8")
-    assert "test_martin_device_list_precondition_retry" in text
-    assert "test_conversations_bundle_precondition_retry" in text
+@pytest.mark.asyncio
+async def test_pep_precondition_retry_required_for_martin_bundles() -> None:
+    """Bundle publish must handle PEP conflict like device-list (audit gap until fixed)."""
+    from omemo_interop.source_audit import read_vendor
 
-
-@pytest.mark.compatibility
-@pytest.mark.audit
-def test_device_list_fetch_error_patterns_documented() -> None:
-    """Empty-list on PEP failure is a static audit finding (Martin try?, Monal fake list)."""
-    monal_audit = Path(__file__).resolve().parent / "test_monal_control_flow_audit.py"
-    source_audit = Path(__file__).resolve().parent / "test_source_control_flow_audit.py"
-    assert "devicelist_fetch_error" in monal_audit.read_text(encoding="utf-8")
-    assert "pep_failure_swallowed" in source_audit.read_text(encoding="utf-8")
+    text = read_vendor("vendor/MartinOMEMO/Sources/MartinOMEMO/OMEMOModule.swift")
+    bundle_section = text.split("func publishDeviceBundle(signedPreKey", 1)[1][:2500]
+    assert ".conflict" in bundle_section or "configureNode" in bundle_section, (
+        "martin_bundle_publish: bundle publish must retry/reconfigure on PEP conflict"
+    )

@@ -200,9 +200,12 @@ def test_documented_file_key_size_differs_from_message() -> None:
 
 
 @pytest.mark.compatibility
-def test_trust_model_difference_documented(compat_findings: list[dict]) -> None:
+def test_trust_model_siskin_must_not_ignore_compromised_identities(compat_findings: list[dict]) -> None:
+    """P1 siskin_trust_callback_always_true: Siskin isTrusted must not always return true."""
     gap = next(g for g in compat_findings if g["id"] == "siskin_trust_callback_always_true")
     assert gap["aligned"] is False
+    from omemo_interop.source_audit import assert_no_pattern
+
     siskin_store = (
         Path(__file__).resolve().parent.parent.parent
         / "vendor"
@@ -212,7 +215,11 @@ def test_trust_model_difference_documented(compat_findings: list[dict]) -> None:
         / "DBOMEMOStore.swift"
     )
     text = siskin_store.read_text(encoding="utf-8")
-    assert "func isTrusted" in text and "return true" in text
+    assert_no_pattern(
+        text,
+        r"func isTrusted\(identity: SignalAddress, key:.*?\n.*?return true",
+        "siskin_trust_callback_always_true",
+    )
     conv = CONVERSATIONS_CONFIG.read_text(encoding="utf-8")
     assert "PUT_AUTH_TAG_INTO_KEY" in conv
 
