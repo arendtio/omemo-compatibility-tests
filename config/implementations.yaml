@@ -60,6 +60,14 @@ implementations:
     namespace: eu.siacs.conversations.axolotl
     wire_runner: monal_native
 
+  - id: siskin_im
+    description: Siskin IM iOS client — Tigase Swift, legacy axolotl OMEMO
+    repo: https://github.com/tigase/siskin-im.git
+    branch: master
+    type: client
+    namespace: eu.siacs.conversations.axolotl
+    wire_runner: monal_family
+
   # OMEMO 2 backends — optional, not used in default interop matrix
   - id: python-twomemo
     description: OMEMO 2 (urn:xmpp:omemo:2) — excluded from default interop
@@ -75,3 +83,4 @@ upstream_test_commands:
 client_build_commands:
   conversations: "cd interop/clients && ./gradlew :conversations:installDist -q"
   monal: "cd interop/clients && ./gradlew :monal:installDist -q"
+  siskin_im: "cd interop/clients && ./gradlew :siskin:installDist -q"

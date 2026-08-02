@@ -674,9 +674,9 @@ implementations:
   omemo_top_status: 100
   os_support:
   - iOS
-  runner: unimplemented
+  runner: monal_family
   wire_capable: true
-  status: planned
+  status: active
   tracking_issue: https://projects.tigase.net/issue/siskinim-101
 - id: smuxi
   omemo_top_slug: smuxi

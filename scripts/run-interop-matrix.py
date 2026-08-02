@@ -17,29 +17,36 @@ MATRIX = ROOT / "config" / "interop-matrix.yaml"
 CLIENTS_DIR = ROOT / "interop" / "clients"
 
 
-def run(cmd: list[str], env: dict | None = None, timeout: int = 120) -> int:
+def run(cmd: list[str], env: dict | None = None, timeout: int = 120, cwd: Path | None = None) -> int:
     print(f"$ {' '.join(cmd)}")
     merged = os.environ.copy()
     if env:
         merged.update(env)
     merged["OMEMO_INTEROP_ROOT"] = str(ROOT)
     try:
-        return subprocess.call(cmd, cwd=ROOT, env=merged, timeout=timeout)
+        return subprocess.call(cmd, cwd=cwd or ROOT, env=merged, timeout=timeout)
     except subprocess.TimeoutExpired:
         print("TIMEOUT")
         return 124
 
 
-def gradle_client_task(client_id: str) -> str:
-    return f":{client_id}:installDist"
+def gradle_module(client_id: str, matrix: dict) -> str:
+    client_cfg = matrix.get("clients", {}).get(client_id, {})
+    return client_cfg.get("gradle_module", client_id)
 
 
-def client_launcher(client_id: str) -> Path:
-    return CLIENTS_DIR / client_id / "build" / "install" / client_id / "bin" / client_id
+def gradle_client_task(module: str) -> str:
+    return f":{module}:installDist"
 
 
-def build_clients(client_ids: set[str]) -> int:
-    tasks = [gradle_client_task(c) for c in sorted(client_ids)]
+def client_launcher(client_id: str, matrix: dict) -> Path:
+    module = gradle_module(client_id, matrix)
+    return CLIENTS_DIR / module / "build" / "install" / module / "bin" / module
+
+
+def build_clients(client_ids: set[str], matrix: dict) -> int:
+    modules = {gradle_module(c, matrix) for c in client_ids}
+    tasks = [gradle_client_task(m) for m in sorted(modules)]
     gradlew = CLIENTS_DIR / "gradlew"
     if not gradlew.exists():
         print("Gradle wrapper missing in interop/clients", file=sys.stderr)
@@ -49,6 +56,7 @@ def build_clients(client_ids: set[str]) -> int:
 
 def run_client(
     client_id: str,
+    matrix: dict,
     mode: str,
     jid: str,
     password: str,
@@ -57,7 +65,7 @@ def run_client(
     expect: str | None = None,
     data_dir: Path | None = None,
 ) -> int:
-    launcher = client_launcher(client_id)
+    launcher = client_launcher(client_id, matrix)
     if not launcher.exists():
         print(f"Client binary missing: {launcher}", file=sys.stderr)
         return 1
@@ -92,14 +100,14 @@ def run_client(
     return run(args, timeout=90)
 
 
-def scenario_alice_sends_bob_replies(left: str, right: str) -> int:
+def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
     tag = f"{left}-to-{right}"
 
     bob_proc = subprocess.Popen(
         [
-            str(client_launcher(right)),
+            str(client_launcher(right, matrix)),
             "--mode", "wait",
             "--expect", f"hello-{tag}",
             "--",
@@ -112,10 +120,10 @@ def scenario_alice_sends_bob_replies(left: str, right: str) -> int:
         cwd=ROOT,
         env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT)},
     )
-    time.sleep(3)
+    time.sleep(12)
 
     rc = run_client(
-        left, "send",
+        left, matrix, "send",
         alice_jid, "alicepass",
         peer=bob_jid,
         send=f"hello-{tag}",
@@ -136,7 +144,7 @@ def scenario_alice_sends_bob_replies(left: str, right: str) -> int:
     # Bob replies
     alice_proc = subprocess.Popen(
         [
-            str(client_launcher(left)),
+            str(client_launcher(left, matrix)),
             "--mode", "wait",
             "--expect", f"reply-{tag}",
             "--",
@@ -151,7 +159,7 @@ def scenario_alice_sends_bob_replies(left: str, right: str) -> int:
     )
     time.sleep(1)
     rc = run_client(
-        right, "send",
+        right, matrix, "send",
         bob_jid, "bobpass",
         peer=alice_jid,
         send=f"reply-{tag}",
@@ -167,9 +175,17 @@ def scenario_alice_sends_bob_replies(left: str, right: str) -> int:
         return 1
 
 
+def reset_localhost_users() -> None:
+    """Drop and recreate matrix users to clear stale OMEMO PEP device lists."""
+    ctl = ["sudo", "ejabberdctl"]
+    for user, password in [("alice", "alicepass"), ("bob", "bobpass")]:
+        subprocess.call(ctl + ["unregister", user, "localhost"], cwd=ROOT)
+        subprocess.call(ctl + ["register", user, "localhost", password], cwd=ROOT)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run OMEMO client interop matrix")
-    parser.add_argument("--pair", default="conversations-vs-monal")
+    parser.add_argument("--pair", default="conversations-vs-siskin")
     parser.add_argument("--build", action="store_true", help="Build client runners first")
     args = parser.parse_args()
 
@@ -179,15 +195,17 @@ def main() -> int:
     pair = next(p for p in matrix["pairs"] if p["id"] == args.pair)
     clients = {pair["left"], pair["right"]}
 
-    if args.build or not all(client_launcher(c).exists() for c in clients):
-        rc = build_clients(clients)
+    reset_localhost_users()
+
+    if args.build or not all(client_launcher(c, matrix).exists() for c in clients):
+        rc = build_clients(clients, matrix)
         if rc != 0:
             return rc
 
     for scenario in pair["scenarios"]:
         print(f"\n=== Scenario: {scenario} ({pair['id']}) ===")
         if scenario in {"alice_sends_bob_replies", "cross_session_roundtrip"}:
-            rc = scenario_alice_sends_bob_replies(pair["left"], pair["right"])
+            rc = scenario_alice_sends_bob_replies(pair["left"], pair["right"], matrix)
         else:
             print(f"Unknown scenario: {scenario}")
             return 1

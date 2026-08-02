@@ -6,6 +6,13 @@ namespace_uri: "eu.siacs.conversations.axolotl"
 
 # Wire interop pairs — each side uses code from the checked-out vendor tree.
 pairs:
+  - id: conversations-vs-siskin
+    description: Conversations Android vendor binding vs Siskin IM vendor binding
+    left: conversations
+    right: siskin_im
+    scenarios:
+      - alice_sends_bob_replies
+
   - id: conversations-vs-monal
     description: Conversations Android crypto stack vs Monal iOS crypto stack
     left: conversations
@@ -33,6 +40,7 @@ clients:
   conversations:
     vendor_id: conversations
     implementation: conversations
+    gradle_module: conversations
     runner: interop/clients/conversations
     main_class: org.omemo.interop.conversations.ConversationsWireClient
     platform: [linux, macos]
@@ -43,12 +51,24 @@ clients:
   monal:
     vendor_id: monal
     implementation: monal
+    gradle_module: monal
     runner: interop/clients/monal
     main_class: org.omemo.interop.monal.MonalWireClient
     platform: [linux, macos]
     notes: >
       Uses Monal-linked libsignal stack from vendor/monal (SignalProtocolC fork).
       On macOS also builds monal-native ObjC runner from vendor MLOMEMO sources.
+
+  siskin_im:
+    vendor_id: siskin_im
+    implementation: siskin_im
+    gradle_module: siskin
+    runner: interop/clients/siskin
+    main_class: org.omemo.interop.siskin.SiskinWireClient
+    platform: [linux, macos]
+    notes: >
+      Vendor checkout tigase/siskin-im; wire runner uses Smack legacy OMEMO until
+      Tigase Swift native bridge is wired on Linux CI.
 
   slixmpp-oldmemo:
     vendor_id: slixmpp-omemo

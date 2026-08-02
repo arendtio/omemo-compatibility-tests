@@ -1,15 +1,19 @@
 package org.omemo.interop;
 
 import org.jivesoftware.smack.SmackConfiguration;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Stanza;
 import org.jivesoftware.smack.tcp.XMPPTCPConnection;
 import org.jivesoftware.smack.tcp.XMPPTCPConnectionConfiguration;
 import org.jivesoftware.smackx.carbons.packet.CarbonExtension;
+import org.jivesoftware.smack.roster.Roster;
 import org.jivesoftware.smackx.omemo.OmemoManager;
 import org.jivesoftware.smackx.omemo.OmemoMessage;
 import org.jivesoftware.smackx.omemo.internal.OmemoDevice;
 import org.jivesoftware.smackx.omemo.listener.OmemoMessageListener;
+import org.jivesoftware.smackx.omemo.OmemoService;
+import org.jivesoftware.smackx.omemo.signal.SignalFileBasedOmemoStore;
 import org.jivesoftware.smackx.omemo.signal.SignalOmemoService;
 import org.jivesoftware.smackx.omemo.trust.OmemoFingerprint;
 import org.jivesoftware.smackx.omemo.trust.OmemoTrustCallback;
@@ -17,14 +21,19 @@ import org.jivesoftware.smackx.omemo.trust.TrustState;
 import org.jxmpp.jid.EntityBareJid;
 import org.jxmpp.jid.impl.JidCreate;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.Security;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Headless legacy OMEMO wire client (eu.siacs.conversations.axolotl) using Smack + libsignal.
@@ -62,10 +71,29 @@ public final class LegacyOmemoWireClient {
         this.port = port;
     }
 
-    public static void ensureOmemoService() {
+    private static Path configuredStoreRoot = null;
+    private static boolean omemoServiceInitialized = false;
+
+    public static void ensureOmemoService(Path dataDir) throws IOException {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+        Files.createDirectories(dataDir);
+        Path storeRoot = dataDir.resolve("omemo-store");
+        if (configuredStoreRoot != null && !configuredStoreRoot.equals(storeRoot)) {
+            throw new IllegalStateException("SignalOmemoService already configured for a different data dir");
+        }
+        configuredStoreRoot = storeRoot;
         try {
             SignalOmemoService.acknowledgeLicense();
-            SignalOmemoService.setup();
+            if (!omemoServiceInitialized) {
+                SignalOmemoService.setup();
+                omemoServiceInitialized = true;
+            }
+            SignalFileBasedOmemoStore store = new SignalFileBasedOmemoStore(storeRoot.toFile());
+            @SuppressWarnings("rawtypes")
+            OmemoService service = SignalOmemoService.getInstance();
+            service.setOmemoStoreBackend(store);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to setup SignalOmemoService", e);
         }
@@ -75,12 +103,30 @@ public final class LegacyOmemoWireClient {
         Files.createDirectories(dataDir);
         SmackConfiguration.DEBUG = false;
 
+        X509TrustManager trustAll = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
+        HostnameVerifier trustAllHosts = (hostname, session) -> true;
+
         XMPPTCPConnectionConfiguration config = XMPPTCPConnectionConfiguration.builder()
                 .setHost(host)
                 .setPort(port)
                 .setXmppDomain(jid.asDomainBareJid())
                 .setUsernameAndPassword(jid.getLocalpart(), password)
-                .setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.disabled)
+                .setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.required)
+                .setCustomX509TrustManager(trustAll)
+                .setHostnameVerifier(trustAllHosts)
                 .build();
 
         connection = new XMPPTCPConnection(config);
@@ -122,12 +168,19 @@ public final class LegacyOmemoWireClient {
         });
 
         connection.connect();
-        omemoManager.initialize();
         connection.login();
+        Roster roster = Roster.getInstanceFor(connection);
+        roster.setSubscriptionMode(Roster.SubscriptionMode.accept_all);
+        omemoManager.initialize();
         connection.setReplyTimeout(Duration.ofSeconds(30).toMillis());
     }
 
     public void sendEncrypted(EntityBareJid peer, String plaintext) throws Exception {
+        Roster roster = Roster.getInstanceFor(connection);
+        if (!roster.contains(peer)) {
+            roster.createEntry(peer, peer.getLocalpart().toString(), null);
+            Thread.sleep(500);
+        }
         var builder = connection.getStanzaFactory().buildMessageStanza()
                 .to(peer)
                 .ofType(Message.Type.chat);
@@ -199,8 +252,6 @@ public final class LegacyOmemoWireClient {
 
     public static int runScenario(String implementationId, Path vendorRoot, String[] args) {
         try {
-            LegacyOmemoWireClient.ensureOmemoService();
-
             String mode = null;
             String peerStr = null;
             String sendBody = null;
@@ -231,12 +282,13 @@ public final class LegacyOmemoWireClient {
             }
 
             LegacyOmemoWireClient client = fromArgs(implementationId, vendorRoot, clientArgs);
+            ensureOmemoService(client.dataDir);
             System.out.println("IMPLEMENTATION=" + implementationId);
             System.out.println("VENDOR_REV=" + client.vendorRevision());
             System.out.println("NAMESPACE=eu.siacs.conversations.axolotl");
 
             client.connect();
-            Thread.sleep(2000);
+            Thread.sleep(5000);
 
             if ("send-wait".equals(mode)) {
                 if (peerStr == null || sendBody == null || expectBody == null) {
