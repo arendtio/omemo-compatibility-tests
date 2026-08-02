@@ -65,6 +65,7 @@ def test_native_conversations_vs_monal_matrix() -> None:
 @skip_no_android
 @skip_no_server
 def test_native_conversations_self_roundtrip_via_script() -> None:
+    """Native vendor Alice (left) vs Smack Conversations proxy Bob (right)."""
     rc = subprocess.call(
         [sys.executable, str(NATIVE_WIRE), "--pair", "conversations-vs-conversations", "--build"],
         cwd=ROOT,

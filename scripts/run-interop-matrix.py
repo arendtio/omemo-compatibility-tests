@@ -65,14 +65,22 @@ def wire_env() -> dict[str, str]:
     }
 
 
-def use_native_wire(client_id: str, native_conversations: bool) -> bool:
-    return native_conversations and client_id == "conversations"
+def use_native_wire(
+    client_id: str, native_conversations: bool, as_matrix_left: bool,
+) -> bool:
+    """Vendor Gradle wire applies only to the matrix left client (alice / conversations)."""
+    return native_conversations and client_id == "conversations" and as_matrix_left
 
 
-def wait_boot(client_id: str, native_conversations: bool, short: bool = False) -> None:
-    if short and not use_native_wire(client_id, native_conversations):
+def wait_boot(
+    client_id: str,
+    native_conversations: bool,
+    as_matrix_left: bool,
+    short: bool = False,
+) -> None:
+    if short and not use_native_wire(client_id, native_conversations, as_matrix_left):
         time.sleep(1)
-    elif use_native_wire(client_id, native_conversations):
+    elif use_native_wire(client_id, native_conversations, as_matrix_left):
         time.sleep(35)
     else:
         time.sleep(12)
@@ -85,6 +93,7 @@ def invoke_client(
     jid: str,
     password: str,
     native_conversations: bool,
+    as_matrix_left: bool,
     peer: str | None = None,
     send: str | None = None,
     expect: str | None = None,
@@ -92,7 +101,7 @@ def invoke_client(
 ) -> int:
     d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
     d.mkdir(parents=True, exist_ok=True)
-    if use_native_wire(client_id, native_conversations):
+    if use_native_wire(client_id, native_conversations, as_matrix_left):
         print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
         return run_native_wire(
             mode, jid, password, d, peer=peer, send=send, expect=expect,
@@ -109,6 +118,7 @@ def spawn_client(
     jid: str,
     password: str,
     native_conversations: bool,
+    as_matrix_left: bool,
     peer: str | None = None,
     send: str | None = None,
     expect: str | None = None,
@@ -116,7 +126,7 @@ def spawn_client(
 ) -> subprocess.Popen:
     d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
     d.mkdir(parents=True, exist_ok=True)
-    if use_native_wire(client_id, native_conversations):
+    if use_native_wire(client_id, native_conversations, as_matrix_left):
         print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
         return popen_native_wire(
             mode, jid, password, d, peer=peer, send=send, expect=expect,
@@ -193,14 +203,14 @@ def scenario_bob_sends_alice_replies(
     tag = f"{right}-to-{left}"
 
     alice_proc = spawn_client(
-        left, matrix, "wait", alice_jid, "alicepass", native_conversations,
+        left, matrix, "wait", alice_jid, "alicepass", native_conversations, True,
         expect=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    wait_boot(left, native_conversations)
+    wait_boot(left, native_conversations, True)
 
     rc = invoke_client(
-        right, matrix, "send", bob_jid, "bobpass", native_conversations,
+        right, matrix, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -218,13 +228,13 @@ def scenario_bob_sends_alice_replies(
         return alice_rc
 
     bob_proc = spawn_client(
-        right, matrix, "wait", bob_jid, "bobpass", native_conversations,
+        right, matrix, "wait", bob_jid, "bobpass", native_conversations, False,
         expect=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    wait_boot(right, native_conversations)
+    wait_boot(right, native_conversations, False)
     rc = invoke_client(
-        left, matrix, "send", alice_jid, "alicepass", native_conversations,
+        left, matrix, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         send=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -249,13 +259,13 @@ def scenario_unicode_body_roundtrip(
     reply = f"reply-unicode-🧪-{tag}"
 
     bob_proc = spawn_client(
-        right, matrix, "wait", bob_jid, "bobpass", native_conversations,
+        right, matrix, "wait", bob_jid, "bobpass", native_conversations, False,
         expect=hello,
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    wait_boot(right, native_conversations)
+    wait_boot(right, native_conversations, False)
     rc = invoke_client(
-        left, matrix, "send", alice_jid, "alicepass", native_conversations,
+        left, matrix, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         send=hello,
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -272,13 +282,13 @@ def scenario_unicode_body_roundtrip(
         return bob_rc
 
     alice_proc = spawn_client(
-        left, matrix, "wait", alice_jid, "alicepass", native_conversations,
+        left, matrix, "wait", alice_jid, "alicepass", native_conversations, True,
         expect=reply,
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    wait_boot(left, native_conversations)
+    wait_boot(left, native_conversations, True)
     rc = invoke_client(
-        right, matrix, "send", bob_jid, "bobpass", native_conversations,
+        right, matrix, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=reply,
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -322,13 +332,13 @@ def scenario_alice_sends_bob_replies(
     tag = f"{left}-to-{right}"
 
     bob_proc = spawn_client(
-        right, matrix, "wait", bob_jid, "bobpass", native_conversations,
+        right, matrix, "wait", bob_jid, "bobpass", native_conversations, False,
         expect=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    wait_boot(right, native_conversations)
+    wait_boot(right, native_conversations, False)
     rc = invoke_client(
-        left, matrix, "send", alice_jid, "alicepass", native_conversations,
+        left, matrix, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         send=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -346,13 +356,13 @@ def scenario_alice_sends_bob_replies(
         return bob_rc
 
     alice_proc = spawn_client(
-        left, matrix, "wait", alice_jid, "alicepass", native_conversations,
+        left, matrix, "wait", alice_jid, "alicepass", native_conversations, True,
         expect=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    wait_boot(left, native_conversations)
+    wait_boot(left, native_conversations, True)
     rc = invoke_client(
-        right, matrix, "send", bob_jid, "bobpass", native_conversations,
+        right, matrix, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -442,7 +452,8 @@ def main() -> int:
         return 1
 
     clients_to_build = {
-        c for c in clients if not use_native_wire(c, native_conversations)
+        c for c in clients
+        if not (c == pair["left"] and use_native_wire(c, native_conversations, True))
     }
     if args.build or any(not client_launcher(c, matrix).exists() for c in clients_to_build):
         rc = build_clients(clients_to_build, matrix)

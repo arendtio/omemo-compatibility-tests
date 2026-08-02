@@ -11,6 +11,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+WIRE_ENV = {
+    **os.environ,
+    "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "disabled"),
+}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -40,7 +45,7 @@ def main() -> int:
                 *(["--build"] if args.build else []),
             ],
             cwd=ROOT,
-            env=os.environ.copy(),
+            env=WIRE_ENV.copy(),
         )
 
     if args.pair:
@@ -58,7 +63,7 @@ def main() -> int:
                 *(["--build"] if args.build else []),
             ],
             cwd=ROOT,
-            env=os.environ.copy(),
+            env=WIRE_ENV.copy(),
         )
 
     return subprocess.call(
@@ -69,7 +74,7 @@ def main() -> int:
             "--no-daemon",
         ],
         cwd=ROOT / "interop" / "android",
-        env=os.environ.copy(),
+        env=WIRE_ENV.copy(),
     )
 
 
