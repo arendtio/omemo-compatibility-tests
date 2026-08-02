@@ -18,6 +18,7 @@ import org.jivesoftware.smackx.omemo.signal.SignalOmemoService;
 import org.jivesoftware.smackx.omemo.trust.OmemoFingerprint;
 import org.jivesoftware.smackx.omemo.trust.OmemoTrustCallback;
 import org.jivesoftware.smackx.omemo.trust.TrustState;
+import org.jxmpp.jid.BareJid;
 import org.jxmpp.jid.EntityBareJid;
 import org.jxmpp.jid.impl.JidCreate;
 
@@ -29,6 +30,7 @@ import java.nio.file.Path;
 import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -100,34 +102,69 @@ public final class LegacyOmemoWireClient {
     }
 
     public void connect() throws Exception {
+        String tlsMode = System.getenv("OMEMO_XMPP_SECURITY");
+        boolean useTls;
+        if (tlsMode == null || tlsMode.isBlank() || tlsMode.equalsIgnoreCase("auto")) {
+            useTls = false;
+        } else {
+            useTls = tlsMode.equalsIgnoreCase("required");
+        }
+        connectInternal(useTls, tlsMode != null && tlsMode.equalsIgnoreCase("auto"));
+    }
+
+    private void connectInternal(boolean useTls, boolean autoTls) throws Exception {
         Files.createDirectories(dataDir);
         SmackConfiguration.DEBUG = false;
 
-        X509TrustManager trustAll = new X509TrustManager() {
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain, String authType) {
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain, String authType) {
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                return new X509Certificate[0];
-            }
-        };
-        HostnameVerifier trustAllHosts = (hostname, session) -> true;
-
-        XMPPTCPConnectionConfiguration config = XMPPTCPConnectionConfiguration.builder()
+        var builder = XMPPTCPConnectionConfiguration.builder()
                 .setHost(host)
                 .setPort(port)
                 .setXmppDomain(jid.asDomainBareJid())
-                .setUsernameAndPassword(jid.getLocalpart(), password)
-                .setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.required)
-                .setCustomX509TrustManager(trustAll)
-                .setHostnameVerifier(trustAllHosts)
-                .build();
+                .setUsernameAndPassword(jid.getLocalpart(), password);
+
+        if (useTls) {
+            X509TrustManager trustAll = new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            };
+            HostnameVerifier trustAllHosts = (hostname, session) -> true;
+            builder.setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.required)
+                    .setCustomX509TrustManager(trustAll)
+                    .setHostnameVerifier(trustAllHosts);
+        } else if (autoTls) {
+            X509TrustManager trustAll = new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            };
+            HostnameVerifier trustAllHosts = (hostname, session) -> true;
+            builder.setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.ifpossible)
+                    .setCustomX509TrustManager(trustAll)
+                    .setHostnameVerifier(trustAllHosts);
+        } else {
+            builder.setSecurityMode(org.jivesoftware.smack.ConnectionConfiguration.SecurityMode.disabled);
+        }
+
+        XMPPTCPConnectionConfiguration config = builder.build();
 
         connection = new XMPPTCPConnection(config);
         omemoManager = OmemoManager.getInstanceFor(connection);
@@ -176,17 +213,46 @@ public final class LegacyOmemoWireClient {
     }
 
     public void sendEncrypted(EntityBareJid peer, String plaintext) throws Exception {
-        Roster roster = Roster.getInstanceFor(connection);
-        if (!roster.contains(peer)) {
-            roster.createEntry(peer, peer.getLocalpart().toString(), null);
-            Thread.sleep(500);
-        }
+        preparePeer(peer);
         var builder = connection.getStanzaFactory().buildMessageStanza()
                 .to(peer)
                 .ofType(Message.Type.chat);
         OmemoMessage.Sent encrypted = omemoManager.encrypt(peer, plaintext);
         Message wire = encrypted.buildMessage(builder, peer);
         connection.sendStanza(wire);
+    }
+
+    private void preparePeer(EntityBareJid peer) throws Exception {
+        Roster roster = Roster.getInstanceFor(connection);
+        if (!roster.contains(peer)) {
+            roster.createEntry(peer, peer.getLocalpart().toString(), null);
+            Thread.sleep(1000);
+        }
+        omemoManager.requestDeviceListUpdateFor(peer);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45);
+        while (System.nanoTime() < deadline) {
+            Set<OmemoDevice> devices = omemoManager.getDevicesOf(peer);
+            if (!devices.isEmpty()) {
+                for (OmemoDevice device : devices) {
+                    try {
+                        omemoManager.rebuildSessionWith(device);
+                    } catch (Exception ignored) {
+                        // session may not exist yet; encrypt will establish it
+                    }
+                }
+                trustAllDevices(peer);
+                return;
+            }
+            Thread.sleep(500);
+            omemoManager.requestDeviceListUpdateFor(peer);
+        }
+        throw new IllegalStateException("No OMEMO devices discovered for peer " + peer);
+    }
+
+    private void trustAllDevices(BareJid peer) throws Exception {
+        for (var entry : omemoManager.getActiveFingerprints(peer).entrySet()) {
+            omemoManager.trustOmemoIdentity(entry.getKey(), entry.getValue());
+        }
     }
 
     public boolean awaitBody(String expected, long timeoutSeconds) throws InterruptedException {

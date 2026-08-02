@@ -63,7 +63,9 @@ jobs:
         run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
 
       - name: Client interop matrix
-        run: python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build
+        run: python3 scripts/run-interop-matrix.py --pair conversations-vs-siskin --build
+        env:
+          OMEMO_XMPP_SECURITY: disabled
 
       - name: Wire pytest suite
         run: python3 -m pytest tests/wire/ -v -m wire

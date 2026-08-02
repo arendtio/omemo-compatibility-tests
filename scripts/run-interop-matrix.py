@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -118,7 +119,7 @@ def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int
             "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
         ],
         cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT)},
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
     )
     time.sleep(12)
 
@@ -155,7 +156,7 @@ def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int
             "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
         ],
         cwd=ROOT,
-        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT)},
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT), "OMEMO_XMPP_SECURITY": os.environ.get("OMEMO_XMPP_SECURITY", "auto")},
     )
     time.sleep(1)
     rc = run_client(
@@ -175,9 +176,37 @@ def scenario_alice_sends_bob_replies(left: str, right: str, matrix: dict) -> int
         return 1
 
 
+def ejabberdctl_cmd() -> list[str]:
+    config = os.environ.get(
+        "EJABBERD_INTEROP_CONFIG",
+        str(ROOT / "docker" / "ejabberd" / "ejabberd.yml"),
+    )
+    os.environ["EJABBERD_CONFIG_PATH"] = config
+    os.environ.setdefault("EJABBERD_NODE", "ejabberd@localhost")
+    base = ["ejabberdctl"]
+    if shutil.which("sudo"):
+        return ["sudo", "-E", *base]
+    return base
+
+
+def ensure_ejabberd() -> int:
+    start = ROOT / "scripts" / "start-ejabberd-interop.sh"
+    if start.exists():
+        return subprocess.call([str(start)], cwd=ROOT)
+    return 0
+
+
 def reset_localhost_users() -> None:
-    """Drop and recreate matrix users to clear stale OMEMO PEP device lists."""
-    ctl = ["sudo", "ejabberdctl"]
+    """Drop and recreate matrix users and wipe local OMEMO stores."""
+    wire_root = ROOT / "tmp" / "wire-data"
+    if wire_root.exists():
+        shutil.rmtree(wire_root)
+    config = os.environ.get(
+        "EJABBERD_INTEROP_CONFIG",
+        str(ROOT / "docker" / "ejabberd" / "ejabberd.yml"),
+    )
+    os.environ["EJABBERD_CONFIG_PATH"] = config
+    ctl = ejabberdctl_cmd()
     for user, password in [("alice", "alicepass"), ("bob", "bobpass")]:
         subprocess.call(ctl + ["unregister", user, "localhost"], cwd=ROOT)
         subprocess.call(ctl + ["register", user, "localhost", password], cwd=ROOT)
@@ -194,6 +223,11 @@ def main() -> int:
 
     pair = next(p for p in matrix["pairs"] if p["id"] == args.pair)
     clients = {pair["left"], pair["right"]}
+
+    os.environ.setdefault("OMEMO_XMPP_SECURITY", "auto")
+    rc = ensure_ejabberd()
+    if rc != 0:
+        return rc
 
     reset_localhost_users()
 

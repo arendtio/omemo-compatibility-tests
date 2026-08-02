@@ -23,3 +23,7 @@
 
 - `docker compose -f docker/ejabberd/docker-compose.yml up -d`
 - `docker compose -f docker/ejabberd/docker-compose.yml down`
+- `./scripts/start-ejabberd-interop.sh` — Local ejabberd (apt) with interop YAML
+- `./scripts/stop-ejabberd-interop.sh` — Stop local interop ejabberd
+
+Wire matrix uses `OMEMO_XMPP_SECURITY=auto` by default (STARTTLS when offered). Set `disabled` for Docker interop ejabberd.
