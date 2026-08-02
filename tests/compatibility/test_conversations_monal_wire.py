@@ -1,4 +1,4 @@
-"""Wire-level compatibility tests for Conversations vs Siskin Gradle runners."""
+"""Wire-level compatibility tests for Conversations vs Monal Gradle runners."""
 
 from __future__ import annotations
 
@@ -32,9 +32,9 @@ skip_no_server = pytest.mark.skipif(
 @pytest.mark.wire
 @pytest.mark.compatibility
 @skip_no_server
-def test_wire_conversations_vs_siskin_matrix() -> None:
+def test_wire_conversations_vs_monal_matrix() -> None:
     rc = subprocess.call(
-        [sys.executable, str(INTEROP_SCRIPT), "--pair", "conversations-vs-siskin"],
+        [sys.executable, str(INTEROP_SCRIPT), "--pair", "conversations-vs-monal"],
         cwd=ROOT,
     )
     assert rc == 0
@@ -43,13 +43,13 @@ def test_wire_conversations_vs_siskin_matrix() -> None:
 @pytest.mark.wire
 @pytest.mark.compatibility
 @skip_no_server
-def test_wire_bob_siskin_sends_first() -> None:
-    """Siskin-initiated session: prekey handshake when recipient has no prior session."""
+def test_wire_bob_monal_sends_first() -> None:
+    """Monal-initiated session: prekey handshake when recipient has no prior session."""
     wipe_compat_data()
     rc = roundtrip(
-        "conversations", "siskin",
-        hello="siskin-init-🧪",
-        reply="conv-reply-after-siskin-init",
+        "conversations", "monal",
+        hello="monal-init-🧪",
+        reply="conv-reply-after-monal-init",
         bob_first=True,
     )
     assert rc == 0
@@ -58,11 +58,11 @@ def test_wire_bob_siskin_sends_first() -> None:
 @pytest.mark.wire
 @pytest.mark.compatibility
 @skip_no_server
-def test_wire_unicode_roundtrip() -> None:
+def test_wire_unicode_roundtrip_monal() -> None:
     wipe_compat_data()
     rc = roundtrip(
-        "conversations", "siskin",
-        hello="hello-unicode-🧪-siskin",
+        "conversations", "monal",
+        hello="hello-unicode-🧪-monal",
         reply="reply-unicode-🧪-conv",
     )
     assert rc == 0
@@ -71,17 +71,17 @@ def test_wire_unicode_roundtrip() -> None:
 @pytest.mark.wire
 @pytest.mark.compatibility
 @skip_no_server
-def test_wire_session_survives_after_first_message() -> None:
+def test_wire_session_survives_after_first_message_monal() -> None:
     """Second message on existing OMEMO session (no fresh prekey handshake)."""
     wipe_compat_data()
     rc = roundtrip(
-        "conversations", "siskin",
+        "conversations", "monal",
         hello="session-msg-1",
         reply="session-msg-2",
     )
     assert rc == 0
     rc = roundtrip(
-        "conversations", "siskin",
+        "conversations", "monal",
         hello="session-msg-3",
         reply="session-msg-4",
     )
@@ -91,12 +91,12 @@ def test_wire_session_survives_after_first_message() -> None:
 @pytest.mark.wire
 @pytest.mark.compatibility
 @skip_no_server
-def test_wire_cross_fetch_without_prior_roster() -> None:
-    """Bob connects and waits before Alice adds him to roster — open PEP must still deliver."""
+def test_wire_cross_fetch_without_prior_roster_monal() -> None:
+    """Bob connects before Alice adds roster — open PEP must still deliver bundles."""
     wipe_compat_data()
     rc = roundtrip(
-        "conversations", "siskin",
-        hello="open-pep-fetch",
-        reply="open-pep-reply",
+        "conversations", "monal",
+        hello="open-pep-fetch-monal",
+        reply="open-pep-reply-monal",
     )
     assert rc == 0

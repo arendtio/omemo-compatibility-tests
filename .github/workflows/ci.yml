@@ -25,7 +25,10 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Download implementations
-        run: python3 scripts/download-implementations.py --skip-optional --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+        run: >
+          python3 scripts/download-implementations.py --skip-optional
+          --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+          --ref monal=c69bd05ac245f8ba1e206e4185a3ca92607ecaa8
 
       - name: Upstream unit tests
         run: python3 scripts/run-upstream-tests.py
@@ -54,7 +57,10 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Download implementations
-        run: python3 scripts/download-implementations.py --skip-optional --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+        run: >
+          python3 scripts/download-implementations.py --skip-optional
+          --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+          --ref monal=c69bd05ac245f8ba1e206e4185a3ca92607ecaa8
 
       - name: Build wire clients
         run: ./scripts/build-clients.sh
@@ -62,14 +68,48 @@ jobs:
       - name: Start ejabberd
         run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
 
-      - name: Client interop matrix
+      - name: Client interop matrix (Siskin)
         run: python3 scripts/run-interop-matrix.py --pair conversations-vs-siskin --build
         env:
           OMEMO_XMPP_SECURITY: disabled
 
+      - name: Client interop matrix (Monal)
+        run: python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+
       - name: Wire pytest suite
-        run: python3 -m pytest tests/wire/ -v -m wire
+        run: python3 -m pytest tests/wire/ tests/compatibility/ -v -m wire
+        env:
+          OMEMO_XMPP_SECURITY: disabled
 
       - name: Stop ejabberd
         if: always()
         run: docker compose -f docker/ejabberd/docker-compose.yml down
+
+  server-matrix-prosody:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install suite
+        run: pip install -e ".[dev]"
+
+      - name: Download slixmpp vendor
+        run: python3 scripts/download-implementations.py --only slixmpp-omemo
+
+      - name: Start Prosody
+        run: docker compose -f docker/prosody/docker-compose.yml up -d --wait
+
+      - name: Prosody server-matrix roundtrip
+        run: python3 scripts/run-server-matrix.py --profile prosody
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+
+      - name: Stop Prosody
+        if: always()
+        run: docker compose -f docker/prosody/docker-compose.yml down

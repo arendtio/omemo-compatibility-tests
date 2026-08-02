@@ -23,6 +23,8 @@ pairs:
     scenarios:
       - alice_sends_bob_replies
       - bob_sends_alice_replies
+      - unicode_body_roundtrip
+      - repeated_session_messages
 
   - id: conversations-vs-conversations
     description: Sanity check — two sessions using Conversations implementation

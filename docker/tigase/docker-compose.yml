@@ -1,0 +1,16 @@
+# Tigase XMPP Server for OMEMO interoperability smoke tests.
+
+services:
+  tigase:
+    image: tigase/tigase-xmpp-server:8.4.0
+    container_name: omemo-interop-tigase
+    ports:
+      - "5222:5222"
+      - "8080:8080"
+    volumes:
+      - tigase_data:/home/tigase/tigase-server/data
+      - tigase_etc:/home/tigase/tigase-server/etc
+
+volumes:
+  tigase_data:
+  tigase_etc:

@@ -186,13 +186,14 @@ regression_matrix:
   - id: prekey_variants
     covered: true
   - id: bundle_not_ready_no_partial_send
-    covered: partial
-    note: harness rejects; vendor static audit documents gap
+    covered: true
+    note: harness rejects via NoEligibleDevices when bundle missing
   - id: one_cipher_fails_no_wire_message
     covered: partial
+    note: harness partial-coverage decrypt fail; vendor static audits document send-path gaps
   - id: foreign_jid_same_device_id
-    covered: static_only
-    note: Monal deviceid-only self filter; static audit in test_monal_self_device_filter_not_jid_scoped
+    covered: true
+    note: harness multi-recipient same device id; Monal static audit for JID-scoping bug
   - id: muc_duplicate_rid
     covered: true
   - id: pep_precondition_not_met_retry
@@ -201,8 +202,8 @@ regression_matrix:
     covered: static_only
     note: Monal fakes empty list; MartinOMEMO try? returns []
   - id: compromised_identity_blocked
-    covered: static_only
-    note: Monal acceptedTrustLevel; Siskin isTrusted always true
+    covered: true
+    note: harness NoEligibleDevices when distrusted; Monal static acceptedTrustLevel
   - id: carbon_mam_duplicate
-    covered: static_only
-    note: Monal Signal error code 3 dedup path
+    covered: partial
+    note: carbon duplicate XML fixture + Monal Signal error code 3 static audit

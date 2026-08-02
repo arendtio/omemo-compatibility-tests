@@ -1,0 +1,45 @@
+# XMPP server profiles for legacy OMEMO wire interoperability.
+# Each profile must expose plaintext C2S on 127.0.0.1:5222 when active.
+
+default_profile: ejabberd
+
+profiles:
+  ejabberd:
+    description: ejabberd with open PEP access for axolotl nodes
+    docker_compose: docker/ejabberd/docker-compose.yml
+    service: ejabberd
+    host: 127.0.0.1
+    port: 5222
+    domain: localhost
+    users:
+      - {user: alice, password: alicepass}
+      - {user: bob, password: bobpass}
+    notes: force_node_config open access for eu.siacs.conversations.axolotl.*
+
+  prosody:
+    description: Prosody with mod_pep open access for OMEMO PEP nodes
+    docker_compose: docker/prosody/docker-compose.yml
+    service: prosody
+    host: 127.0.0.1
+    port: 5222
+    domain: localhost
+    users:
+      - {user: alice, password: alicepass}
+      - {user: bob, password: bobpass}
+    notes: pep_auto_subscribe + pubsub open access_model
+
+  tigase:
+    description: Tigase XMPP Server with PEP for OMEMO interop smoke tests
+    docker_compose: docker/tigase/docker-compose.yml
+    service: tigase
+    host: 127.0.0.1
+    port: 5222
+    domain: localhost
+    users:
+      - {user: alice, password: alicepass}
+      - {user: bob, password: bobpass}
+    notes: Minimal Tigase config; PEP open nodes for axolotl bundles
+
+scenarios:
+  - id: slixmpp_roundtrip
+    description: slixmpp-omemo alice→bob→alice on active server profile

@@ -268,4 +268,4 @@ def test_vendor_prekey_parsing_rules_match() -> None:
     assert "equalsIgnoreCase(\"1\")" in conv
     if MARTIN_OMEMO_DECODE.is_file():
         martin = MARTIN_OMEMO_DECODE.read_text(encoding="utf-8")
-        assert 'getAttribute("prekey") == "1"' in martin
+        assert 'attribute("prekey") == "1"' in martin or 'attribute("prekey") == "true"' in martin

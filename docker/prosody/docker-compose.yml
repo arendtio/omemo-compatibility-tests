@@ -1,0 +1,25 @@
+services:
+  prosody:
+    image: prosody/prosody:13.0
+    container_name: omemo-interop-prosody
+    ports:
+      - "5222:5222"
+    volumes:
+      - ./prosody.cfg.lua:/etc/prosody/prosody.cfg.lua:ro
+      - prosody_data:/var/lib/prosody
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        prosodyctl register alice localhost alicepass || true
+        prosodyctl register bob localhost bobpass || true
+        exec prosody -F
+    healthcheck:
+      test: ["CMD", "prosodyctl", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  prosody_data:

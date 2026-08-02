@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Audit fixture: Carbon/MAM may redeliver the same OMEMO stanza; receivers must dedup or repair. -->
+<message xmlns="jabber:client" type="chat" id="carbon-dup-1" from="alice@localhost" to="bob@localhost">
+  <encrypted xmlns="eu.siacs.conversations.axolotl">
+    <header sid="100">
+      <key rid="1">c2lnbmFsMQ==</key>
+      <iv>MDEyMzQ1Njc4OTAx</iv>
+    </header>
+    <payload>cGF5bG9hZDE=</payload>
+  </encrypted>
+</message>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Audit fixture: device announced on PEP list but bundle node empty/missing. -->
+<list xmlns="eu.siacs.conversations.axolotl">
+  <device id="42"/>
+</list>

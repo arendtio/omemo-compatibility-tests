@@ -37,6 +37,7 @@ markers = [
     "scenario: known incompatibility regression tests",
     "compatibility: Conversations vs Siskin (and related) alignment tests",
     "audit: static control-flow audits from pinned vendor source",
+    "native: native vendor crypto bridge availability (often skipped on Linux CI)",
     "omemo2: OMEMO 2 / twomemo tests (excluded from default legacy interop)",
 ]
 testpaths = ["tests"]

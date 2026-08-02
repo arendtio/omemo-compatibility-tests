@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import Final
 
 import oldmemo
@@ -68,3 +69,13 @@ def set_prekey_attribute(xml: str, value: str) -> ET.Element:
 def payload_present(xml: str) -> bool:
     encrypted = axolotl_encrypted_element(xml)
     return encrypted.find(f"{NS}payload") is not None
+
+
+FIXTURES_DIR = Path(__file__).resolve().parent.parent.parent / "tests" / "compatibility" / "fixtures"
+
+
+def load_fixture(name: str) -> str:
+    path = FIXTURES_DIR / name
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return path.read_text(encoding="utf-8")

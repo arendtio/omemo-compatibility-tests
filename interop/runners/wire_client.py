@@ -225,6 +225,41 @@ async def run_slixmpp_wire(
     raise ValueError(f"Unknown mode {mode}")
 
 
+def run_gradle_wire_proxy(
+    module: str,
+    args: argparse.Namespace,
+    label: str,
+) -> int:
+    launcher = ROOT / "interop" / "clients" / module / "build" / "install" / module / "bin" / module
+    if not launcher.exists():
+        print(f"{label} Gradle proxy not built: {launcher}", file=sys.stderr)
+        return 2
+    cmd = [
+        str(launcher),
+        "--mode", args.mode,
+        *(["--peer", args.peer] if args.peer else []),
+        *(["--send", args.send] if args.send else []),
+        *(["--expect", args.expect] if args.expect else []),
+        "--",
+        "--jid", args.jid,
+        "--password", args.password,
+        "--host", args.host,
+        "--port", str(args.port),
+        "--data-dir", str(args.data_dir),
+    ]
+    env = {**dict(__import__("os").environ), "OMEMO_INTEROP_ROOT": str(ROOT)}
+    print(f"RUNNER={label} PROXY=smack_libsignal_java")
+    return subprocess.call(cmd, cwd=ROOT, env=env, timeout=120)
+
+
+def run_monal_native_proxy(args: argparse.Namespace) -> int:
+    return run_gradle_wire_proxy("monal", args, "monal_native")
+
+
+def run_siskin_family_proxy(args: argparse.Namespace) -> int:
+    return run_gradle_wire_proxy("siskin", args, "monal_family")
+
+
 def run_conversations_android_crypto(args: argparse.Namespace) -> int:
     gradlew = ROOT / "interop" / "android" / "gradlew"
     if not gradlew.exists():
@@ -246,7 +281,7 @@ def run_conversations_android_crypto(args: argparse.Namespace) -> int:
         cmd.append(f"-PwireSend={args.send}")
     if args.expect:
         cmd.append(f"-PwireExpect={args.expect}")
-    env = {**dict(**__import__("os").environ), "OMEMO_INTEROP_ROOT": str(ROOT)}
+    env = {**dict(__import__("os").environ), "OMEMO_INTEROP_ROOT": str(ROOT)}
     return subprocess.call(cmd, cwd=ROOT / "interop" / "android", env=env)
 
 
@@ -287,7 +322,13 @@ def main() -> int:
     if runner == "conversations_android_crypto":
         return run_conversations_android_crypto(args)
 
-    if runner in ("monal_native", "monal_family", "dino_native", "converse_js", "unimplemented"):
+    if runner == "monal_native":
+        return run_monal_native_proxy(args)
+
+    if runner == "monal_family":
+        return run_siskin_family_proxy(args)
+
+    if runner in ("dino_native", "converse_js", "unimplemented"):
         print(f"RUNNER={runner} STATUS=skipped — not yet wired for headless real code")
         return 2
 
