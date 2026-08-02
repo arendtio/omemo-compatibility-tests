@@ -37,7 +37,28 @@ jobs:
         run: ./scripts/build-clients.sh
 
       - name: Legacy interoperability tests
-        run: python3 -m pytest tests/ -v -m "not wire and not omemo2"
+        run: python3 -m pytest tests/ -v -m "not wire and not omemo2 and not vendor_bug"
+
+  vendor-open-bugs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install suite
+        run: pip install -e ".[dev]"
+
+      - name: Download implementations
+        run: >
+          python3 scripts/download-implementations.py --skip-optional
+          --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+          --ref monal=c69bd05ac245f8ba1e206e4185a3ca92607ecaa8
+
+      - name: Open vendor bug tests (expected failures until upstream fixes)
+        run: python3 -m pytest tests/compatibility/test_vendor_open_bugs.py -v -m vendor_bug
 
   wire:
     runs-on: ubuntu-latest

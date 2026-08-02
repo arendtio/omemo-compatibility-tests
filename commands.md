@@ -12,7 +12,8 @@
 
 ## Test Commands
 
-- `python3 -m pytest tests/ -v -m "not wire and not omemo2"` — Default legacy suite
+- `python3 -m pytest tests/ -v -m "not wire and not omemo2 and not vendor_bug"` — Default legacy suite (green)
+- `python3 -m pytest tests/compatibility/test_vendor_open_bugs.py -v -m vendor_bug` — Open vendor bugs (fails until upstream fixes)
 - `python3 -m pytest tests/ -v -m wire` — Wire tests (XMPP server required)
 - `python3 -m pytest tests/ -v -m omemo2` — Optional OMEMO 2 tests
 - `python3 -m pytest tests/ -v -m native` — Native bridge availability (mostly skipped)

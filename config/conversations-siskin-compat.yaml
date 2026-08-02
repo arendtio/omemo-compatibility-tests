@@ -29,6 +29,7 @@ findings:
     tests:
       - tests/compatibility/test_source_control_flow_audit.py::test_conversations_partial_send_pattern_documented
       - tests/compatibility/test_audit_regression_fixtures.py::test_partial_coverage_message_rejected_by_harness
+      - tests/compatibility/test_vendor_open_bugs.py::test_partial_send_conversations_violates_expected_subset_encoded
 
   - id: partial_send_siskin
     severity: P0
@@ -45,6 +46,8 @@ findings:
     tests:
       - tests/compatibility/test_source_control_flow_audit.py::test_siskin_partial_send_pattern_documented
       - tests/compatibility/test_source_control_flow_audit.py::test_siskin_pep_failure_swallowed_pattern
+      - tests/compatibility/test_vendor_open_bugs.py::test_partial_send_siskin_violates_expected_subset_encoded
+      - tests/compatibility/test_vendor_open_bugs.py::test_siskin_pep_failure_must_not_yield_empty_send_set
 
   - id: siskin_bundle_before_announce
     severity: P1
@@ -57,6 +60,7 @@ findings:
     minimal_fix: "Propagate XMPP errors; reconfigure bundle node on precondition-not-met"
     tests:
       - tests/compatibility/test_source_control_flow_audit.py::test_siskin_bundle_publish_error_handling
+      - tests/compatibility/test_vendor_open_bugs.py::test_siskin_bundle_publish_must_not_swallow_non_item_not_found
 
   - id: siskin_trust_callback_always_true
     severity: P1
@@ -70,6 +74,7 @@ findings:
     tests:
       - tests/compatibility/test_source_control_flow_audit.py::test_siskin_istrusted_always_true
       - tests/compatibility/test_conversations_siskin_protocol.py::test_trust_model_difference_documented
+      - tests/compatibility/test_vendor_open_bugs.py::test_siskin_istrusted_always_true_allows_compromised_send
 
   - id: auth_tag_in_ratchet_key
     severity: info
@@ -109,6 +114,7 @@ findings:
       - https://github.com/monal-im/Monal/issues/240
     tests:
       - tests/compatibility/test_monal_control_flow_audit.py::test_monal_partial_send_add_encryption_continues_on_error
+      - tests/compatibility/test_vendor_open_bugs.py::test_partial_send_monal_violates_expected_subset_encoded
 
   - id: monal_self_device_filter_not_jid_scoped
     severity: P1
@@ -137,6 +143,7 @@ findings:
     minimal_fix: "Try all keys with matching rid like Conversations/MartinOMEMO"
     tests:
       - tests/compatibility/test_monal_control_flow_audit.py::test_monal_decrypt_uses_findfirst_for_rid
+      - tests/compatibility/test_vendor_open_bugs.py::test_monal_findfirst_rid_must_try_all_matching_keys
 
   - id: monal_devicelist_fetch_fakes_empty
     severity: P2
@@ -149,6 +156,7 @@ findings:
     minimal_fix: "Surface fetch failure; do not treat as zero devices"
     tests:
       - tests/compatibility/test_monal_control_flow_audit.py::test_monal_devicelist_fetch_error_fakes_empty_list
+      - tests/compatibility/test_vendor_open_bugs.py::test_monal_devicelist_fetch_error_must_not_fake_empty_list
 
   - id: monal_carbon_mam_dedup_signal_error_3
     severity: P2
@@ -161,6 +169,7 @@ findings:
     minimal_fix: "Distinguish true duplicates from stale-session duplicates"
     tests:
       - tests/compatibility/test_monal_control_flow_audit.py::test_monal_duplicate_message_dedup_on_signal_error_3
+      - tests/compatibility/test_vendor_open_bugs.py::test_monal_carbon_duplicate_must_repair_session_not_only_dedup
 
   - id: monal_trust_gating_on_send
     severity: info

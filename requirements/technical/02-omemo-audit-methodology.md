@@ -48,4 +48,14 @@ Deterministic XML + key-state tests (`tests/compatibility/test_audit_regression_
 
 ### Automated static tests
 
-`tests/compatibility/test_source_control_flow_audit.py` re-checks pinned vendor files for known problematic patterns until upstream fixes land.
+`tests/compatibility/test_source_control_flow_audit.py` re-checks pinned vendor files for known problematic patterns until upstream fixes land. **These pass when the bug is still present** (they document source patterns).
+
+### Failing vendor-bug tests
+
+`tests/compatibility/test_vendor_open_bugs.py` asserts the **correct** invariant (`expected ⊆ encoded`, trust gating, etc.) and **fails** while vendor behavior violates it. Marked `vendor_bug`. Run:
+
+```bash
+python3 -m pytest tests/compatibility/test_vendor_open_bugs.py -v -m vendor_bug
+```
+
+When an upstream fix lands, the corresponding `vendor_bug` test should start passing — that is the signal to remove or flip the test.
