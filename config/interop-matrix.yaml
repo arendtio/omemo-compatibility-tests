@@ -7,9 +7,10 @@ namespace_uri: "eu.siacs.conversations.axolotl"
 # Wire interop pairs — each side uses code from the checked-out vendor tree.
 pairs:
   - id: conversations-vs-siskin
-    description: Conversations Android vendor binding vs Siskin IM vendor binding
+    description: "DEPRECATED Smack proxy both sides — use native pairs on macOS"
     left: conversations
     right: siskin_im
+    deprecated_smack_proxy: true
     scenarios:
       - alice_sends_bob_replies
       - bob_sends_alice_replies
@@ -17,9 +18,10 @@ pairs:
       - repeated_session_messages
 
   - id: conversations-vs-monal
-    description: Conversations Android crypto stack vs Monal iOS crypto stack
+    description: "DEPRECATED Smack proxy both sides — use native pairs on macOS"
     left: conversations
     right: monal
+    deprecated_smack_proxy: true
     scenarios:
       - alice_sends_bob_replies
       - bob_sends_alice_replies
@@ -27,7 +29,27 @@ pairs:
       - repeated_session_messages
 
   - id: conversations-native-vs-siskin
-    description: Conversations vendor AxolotlService wire vs Siskin Smack proxy
+    description: Conversations vendor AxolotlService vs Siskin MartinOMEMO (macOS native right)
+    left: conversations
+    right: siskin_im
+    native_left: true
+    native_right: true
+    scenarios:
+      - alice_sends_bob_replies
+      - unicode_body_roundtrip
+
+  - id: conversations-native-vs-monal
+    description: Conversations vendor AxolotlService vs Monal MLOMEMO (macOS native right)
+    left: conversations
+    right: monal
+    native_left: true
+    native_right: true
+    scenarios:
+      - alice_sends_bob_replies
+      - unicode_body_roundtrip
+
+  - id: conversations-native-vs-siskin-smack
+    description: "DEPRECATED: Conversations native vs Siskin Smack proxy (use conversations-native-vs-siskin on macOS)"
     left: conversations
     right: siskin_im
     native_left: true
@@ -35,8 +57,8 @@ pairs:
       - alice_sends_bob_replies
       - unicode_body_roundtrip
 
-  - id: conversations-native-vs-monal
-    description: Conversations vendor AxolotlService wire vs Monal Smack proxy
+  - id: conversations-native-vs-monal-smack
+    description: "DEPRECATED: Conversations native vs Monal Smack proxy"
     left: conversations
     right: monal
     native_left: true
@@ -79,8 +101,8 @@ clients:
     main_class: org.omemo.interop.monal.MonalWireClient
     platform: [linux, macos]
     notes: >
-      Uses Monal-linked libsignal stack from vendor/monal (SignalProtocolC fork).
-      On macOS also builds monal-native ObjC runner from vendor MLOMEMO sources.
+      macOS: interop/monal-native (MLOMEMO + monalxmpp). Linux: deprecated Smack proxy
+      in interop/clients/monal — set OMEMO_FORCE_SMACK_PROXY=1 to force.
 
   siskin_im:
     vendor_id: siskin_im
@@ -89,9 +111,10 @@ clients:
     runner: interop/clients/siskin
     main_class: org.omemo.interop.siskin.SiskinWireClient
     platform: [linux, macos]
+    native_wire: interop/siskin-native
     notes: >
-      Vendor checkout tigase/siskin-im; wire runner uses Smack legacy OMEMO until
-      Tigase Swift native bridge is wired on Linux CI.
+      macOS: Martin + MartinOMEMO via interop/siskin-native. Smack Gradle proxy is
+      deprecated (OMEMO_FORCE_SMACK_PROXY=1). Linux CI keeps Smack until removed.
 
   slixmpp-oldmemo:
     vendor_id: slixmpp-omemo

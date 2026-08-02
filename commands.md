@@ -26,7 +26,8 @@
 - `python3 scripts/run-interop-matrix.py --pair conversations-native-vs-siskin --build --native-conversations` — Vendor AxolotlService vs Siskin (ANDROID_HOME)
 - `python3 scripts/run-interop-matrix.py --pair conversations-native-vs-monal --build --native-conversations` — Vendor AxolotlService vs Monal (ANDROID_HOME)
 - `python3 scripts/run-native-wire-matrix.py --pair conversations-native-vs-siskin --build` — Same via native wire helper script
-- `./scripts/build-conversations-native.sh` — Compile Conversations vendor axolotl + Robolectric unit tests
+- `./scripts/build-siskin-native.sh` — Build Siskin MartinOMEMO native wire (macOS)
+- `./scripts/build-monal-native.sh` — Build Monal monalxmpp + wire CLI scaffold (macOS)
 - `python3 scripts/run-server-matrix.py --profile ejabberd` — slixmpp roundtrip on active server
 - `python3 scripts/run-server-matrix.py --profile prosody --start --stop` — Prosody docker smoke
 

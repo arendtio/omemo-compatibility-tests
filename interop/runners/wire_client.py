@@ -253,11 +253,39 @@ def run_gradle_wire_proxy(
 
 
 def run_monal_native_proxy(args: argparse.Namespace) -> int:
-    return run_gradle_wire_proxy("monal", args, "monal_native")
+    from omemo_interop.monal_native_wire import monal_native_binary, run_monal_native_wire
+
+    if monal_native_binary().exists():
+        return run_monal_native_wire(
+            args.mode,
+            args.jid,
+            args.password,
+            args.data_dir,
+            peer=args.peer,
+            send=args.send,
+            expect=args.expect,
+            host=args.host,
+            port=args.port,
+        )
+    return run_gradle_wire_proxy("monal", args, "monal_native_smack_fallback")
 
 
 def run_siskin_family_proxy(args: argparse.Namespace) -> int:
-    return run_gradle_wire_proxy("siskin", args, "monal_family")
+    from omemo_interop.siskin_native_wire import siskin_native_binary, run_siskin_native_wire
+
+    if siskin_native_binary().exists():
+        return run_siskin_native_wire(
+            args.mode,
+            args.jid,
+            args.password,
+            args.data_dir,
+            peer=args.peer,
+            send=args.send,
+            expect=args.expect,
+            host=args.host,
+            port=args.port,
+        )
+    return run_gradle_wire_proxy("siskin", args, "monal_family_smack_fallback")
 
 
 def run_conversations_android_crypto(args: argparse.Namespace) -> int:

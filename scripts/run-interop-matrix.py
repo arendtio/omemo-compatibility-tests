@@ -18,6 +18,19 @@ MATRIX = ROOT / "config" / "interop-matrix.yaml"
 CLIENTS_DIR = ROOT / "interop" / "clients"
 
 from omemo_interop.native_wire import popen_native_wire, run_native_wire
+from omemo_interop.siskin_native_wire import (
+    build_siskin_native,
+    native_macos_wire_enabled,
+    popen_siskin_native_wire,
+    run_siskin_native_wire,
+    siskin_native_binary,
+)
+from omemo_interop.monal_native_wire import (
+    build_monal_native,
+    monal_native_binary,
+    popen_monal_native_wire,
+    run_monal_native_wire,
+)
 
 
 def run(cmd: list[str], env: dict | None = None, timeout: int = 120, cwd: Path | None = None) -> int:
@@ -65,23 +78,54 @@ def wire_env() -> dict[str, str]:
     }
 
 
-def use_native_wire(
-    client_id: str, native_conversations: bool, as_matrix_left: bool,
+def wants_native_client(
+    client_id: str,
+    pair: dict,
+    as_matrix_left: bool,
+    native_conversations: bool,
 ) -> bool:
-    """Vendor Gradle wire applies only to the matrix left client (alice / conversations)."""
-    return native_conversations and client_id == "conversations" and as_matrix_left
+    """Pair yaml native_left/native_right selects vendor wire per side."""
+    if as_matrix_left and client_id == pair.get("left") and pair.get("native_left"):
+        return True
+    if not as_matrix_left and client_id == pair.get("right") and pair.get("native_right"):
+        return True
+    if native_conversations and client_id == "conversations" and as_matrix_left:
+        return True
+    return False
+
+
+def use_native_wire(
+    client_id: str,
+    pair: dict,
+    as_matrix_left: bool,
+    native_conversations: bool,
+) -> bool:
+    if os.environ.get("OMEMO_FORCE_SMACK_PROXY") == "1":
+        return False
+    if not wants_native_client(client_id, pair, as_matrix_left, native_conversations):
+        return False
+    if client_id == "conversations":
+        return True
+    if client_id == "siskin_im" and native_macos_wire_enabled():
+        return siskin_native_binary().exists()
+    if client_id == "monal" and native_macos_wire_enabled():
+        return monal_native_binary().exists()
+    return False
 
 
 def wait_boot(
     client_id: str,
+    pair: dict,
     native_conversations: bool,
     as_matrix_left: bool,
     short: bool = False,
 ) -> None:
-    if short and not use_native_wire(client_id, native_conversations, as_matrix_left):
+    if short and not use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         time.sleep(1)
-    elif use_native_wire(client_id, native_conversations, as_matrix_left):
+    elif client_id == "conversations" and use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         time.sleep(35)
+    elif use_native_wire(client_id, pair, as_matrix_left, native_conversations):
+        time.sleep(20)
     else:
         time.sleep(12)
 
@@ -89,6 +133,7 @@ def wait_boot(
 def invoke_client(
     client_id: str,
     matrix: dict,
+    pair: dict,
     mode: str,
     jid: str,
     password: str,
@@ -101,11 +146,20 @@ def invoke_client(
 ) -> int:
     d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
     d.mkdir(parents=True, exist_ok=True)
-    if use_native_wire(client_id, native_conversations, as_matrix_left):
+    if use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
-        return run_native_wire(
-            mode, jid, password, d, peer=peer, send=send, expect=expect,
-        )
+        if client_id == "conversations":
+            return run_native_wire(
+                mode, jid, password, d, peer=peer, send=send, expect=expect,
+            )
+        if client_id == "siskin_im":
+            return run_siskin_native_wire(
+                mode, jid, password, d, peer=peer, send=send, expect=expect,
+            )
+        if client_id == "monal":
+            return run_monal_native_wire(
+                mode, jid, password, d, peer=peer, send=send, expect=expect,
+            )
     return run_client(
         client_id, matrix, mode, jid, password, peer, send, expect, d,
     )
@@ -114,6 +168,7 @@ def invoke_client(
 def spawn_client(
     client_id: str,
     matrix: dict,
+    pair: dict,
     mode: str,
     jid: str,
     password: str,
@@ -126,11 +181,20 @@ def spawn_client(
 ) -> subprocess.Popen:
     d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
     d.mkdir(parents=True, exist_ok=True)
-    if use_native_wire(client_id, native_conversations, as_matrix_left):
+    if use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
-        return popen_native_wire(
-            mode, jid, password, d, peer=peer, send=send, expect=expect,
-        )
+        if client_id == "conversations":
+            return popen_native_wire(
+                mode, jid, password, d, peer=peer, send=send, expect=expect,
+            )
+        if client_id == "siskin_im":
+            return popen_siskin_native_wire(
+                mode, jid, password, d, peer=peer, send=send, expect=expect,
+            )
+        if client_id == "monal":
+            return popen_monal_native_wire(
+                mode, jid, password, d, peer=peer, send=send, expect=expect,
+            )
     launcher = client_launcher(client_id, matrix)
     args = [
         str(launcher),
@@ -195,7 +259,7 @@ def run_client(
 
 
 def scenario_bob_sends_alice_replies(
-    left: str, right: str, matrix: dict, native_conversations: bool = False,
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     """Bob (right) initiates; Alice (left) replies — tests reverse prekey handshake."""
     alice_jid = "alice@localhost"
@@ -203,14 +267,14 @@ def scenario_bob_sends_alice_replies(
     tag = f"{right}-to-{left}"
 
     alice_proc = spawn_client(
-        left, matrix, "wait", alice_jid, "alicepass", native_conversations, True,
+        left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         expect=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    wait_boot(left, native_conversations, True)
+    wait_boot(left, pair, native_conversations, True)
 
     rc = invoke_client(
-        right, matrix, "send", bob_jid, "bobpass", native_conversations, False,
+        right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -228,13 +292,13 @@ def scenario_bob_sends_alice_replies(
         return alice_rc
 
     bob_proc = spawn_client(
-        right, matrix, "wait", bob_jid, "bobpass", native_conversations, False,
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         expect=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    wait_boot(right, native_conversations, False)
+    wait_boot(right, pair, native_conversations, False)
     rc = invoke_client(
-        left, matrix, "send", alice_jid, "alicepass", native_conversations, True,
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         send=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -250,7 +314,7 @@ def scenario_bob_sends_alice_replies(
 
 
 def scenario_unicode_body_roundtrip(
-    left: str, right: str, matrix: dict, native_conversations: bool = False,
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
@@ -259,13 +323,13 @@ def scenario_unicode_body_roundtrip(
     reply = f"reply-unicode-🧪-{tag}"
 
     bob_proc = spawn_client(
-        right, matrix, "wait", bob_jid, "bobpass", native_conversations, False,
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         expect=hello,
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    wait_boot(right, native_conversations, False)
+    wait_boot(right, pair, native_conversations, False)
     rc = invoke_client(
-        left, matrix, "send", alice_jid, "alicepass", native_conversations, True,
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         send=hello,
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -282,13 +346,13 @@ def scenario_unicode_body_roundtrip(
         return bob_rc
 
     alice_proc = spawn_client(
-        left, matrix, "wait", alice_jid, "alicepass", native_conversations, True,
+        left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         expect=reply,
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    wait_boot(left, native_conversations, True)
+    wait_boot(left, pair, native_conversations, True)
     rc = invoke_client(
-        right, matrix, "send", bob_jid, "bobpass", native_conversations, False,
+        right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=reply,
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -304,11 +368,11 @@ def scenario_unicode_body_roundtrip(
 
 
 def scenario_repeated_session_messages(
-    left: str, right: str, matrix: dict, native_conversations: bool = False,
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     """Two roundtrips on the same OMEMO stores — second leg uses established sessions."""
     for n in (1, 2):
-        rc = scenario_alice_sends_bob_replies(left, right, matrix, native_conversations)
+        rc = scenario_alice_sends_bob_replies(left, right, matrix, pair, native_conversations)
         if rc != 0:
             print(f"Repeated session leg {n} failed")
             return rc
@@ -325,20 +389,20 @@ SCENARIO_HANDLERS = {
 
 
 def scenario_alice_sends_bob_replies(
-    left: str, right: str, matrix: dict, native_conversations: bool = False,
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
     tag = f"{left}-to-{right}"
 
     bob_proc = spawn_client(
-        right, matrix, "wait", bob_jid, "bobpass", native_conversations, False,
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         expect=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
-    wait_boot(right, native_conversations, False)
+    wait_boot(right, pair, native_conversations, False)
     rc = invoke_client(
-        left, matrix, "send", alice_jid, "alicepass", native_conversations, True,
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         send=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
@@ -356,13 +420,13 @@ def scenario_alice_sends_bob_replies(
         return bob_rc
 
     alice_proc = spawn_client(
-        left, matrix, "wait", alice_jid, "alicepass", native_conversations, True,
+        left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         expect=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
-    wait_boot(left, native_conversations, True)
+    wait_boot(left, pair, native_conversations, True)
     rc = invoke_client(
-        right, matrix, "send", bob_jid, "bobpass", native_conversations, False,
+        right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
@@ -437,8 +501,10 @@ def main() -> int:
         print(f"Unknown pair: {args.pair}", file=sys.stderr)
         return 1
 
-    native_conversations = args.native_conversations or bool(pair.get("native_left"))
     clients = {pair["left"], pair["right"]}
+    native_conversations = args.native_conversations or bool(
+        pair.get("native_left") and pair.get("left") == "conversations"
+    )
 
     os.environ.setdefault("OMEMO_XMPP_SECURITY", "auto")
     rc = ensure_ejabberd()
@@ -447,14 +513,28 @@ def main() -> int:
 
     reset_localhost_users()
 
-    if native_conversations and not os.environ.get("ANDROID_HOME"):
+    needs_conv_native = (
+        wants_native_client("conversations", pair, True, native_conversations)
+        or wants_native_client("conversations", pair, False, native_conversations)
+    )
+    if needs_conv_native and not os.environ.get("ANDROID_HOME"):
         print("ANDROID_HOME required for native Conversations wire", file=sys.stderr)
         return 1
 
-    clients_to_build = {
-        c for c in clients
-        if not (c == pair["left"] and use_native_wire(c, native_conversations, True))
-    }
+    if native_macos_wire_enabled() and (
+        pair.get("native_left") or pair.get("native_right")
+    ):
+        rc = build_siskin_native()
+        if rc != 0:
+            return rc
+        build_monal_native()
+
+    clients_to_build = set()
+    for c in clients:
+        as_left = c == pair["left"]
+        if use_native_wire(c, pair, as_left, native_conversations):
+            continue
+        clients_to_build.add(c)
     if args.build or any(not client_launcher(c, matrix).exists() for c in clients_to_build):
         rc = build_clients(clients_to_build, matrix)
         if rc != 0:
@@ -466,7 +546,7 @@ def main() -> int:
         if handler is None:
             print(f"Unknown scenario: {scenario}")
             return 1
-        rc = handler(pair["left"], pair["right"], matrix, native_conversations)
+        rc = handler(pair["left"], pair["right"], matrix, pair, native_conversations)
         if rc != 0:
             print(f"FAIL scenario {scenario}")
             return rc

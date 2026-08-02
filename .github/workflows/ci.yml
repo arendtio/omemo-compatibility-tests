@@ -143,6 +143,8 @@ jobs:
       - name: Stop ejabberd
         if: always()
         run: docker compose -f docker/ejabberd/docker-compose.yml down
+
+  server-matrix-prosody:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -168,3 +170,54 @@ jobs:
       - name: Stop Prosody
         if: always()
         run: docker compose -f docker/prosody/docker-compose.yml down
+
+  native-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install suite
+        run: pip install -e ".[dev]"
+
+      - name: Download vendors
+        run: >
+          python3 scripts/download-implementations.py --skip-optional
+          --ref martin_omemo=2e8435ec48dfb2a70ba414252cc1c8a3815bf24e
+          --ref monal=c69bd05ac245f8ba1e206e4185a3ca92607ecaa8
+
+      - name: Build Siskin native wire
+        run: ./scripts/build-siskin-native.sh
+
+      - name: Siskin MartinOMEMO crypto tests
+        run: cd interop/siskin-native && swift test
+
+      - name: Build Monal monalxmpp (wire CLI scaffold)
+        run: ./scripts/build-monal-native.sh
+
+      - name: Conversations native proof
+        run: ./scripts/build-conversations-native.sh
+
+      - name: Start ejabberd
+        run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
+
+      - name: Native Conversations vs Siskin MartinOMEMO matrix
+        run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-siskin --native-conversations
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+          OMEMO_NATIVE_MACOS: "1"
+
+      - name: Stop ejabberd
+        if: always()
+        run: docker compose -f docker/ejabberd/docker-compose.yml down

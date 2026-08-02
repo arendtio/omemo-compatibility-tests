@@ -75,6 +75,14 @@ implementations:
     type: library
     optional: true
 
+  - id: martin
+    description: Tigase Martin XMPP library (Siskin / MartinOMEMO wire transport)
+    repo: https://github.com/tigase/Martin.git
+    branch: devel
+    type: library
+    optional: true
+    clone_only: true
+
   # OMEMO 2 backends — optional, not used in default interop matrix
   - id: python-twomemo
     description: OMEMO 2 (urn:xmpp:omemo:2) — excluded from default interop

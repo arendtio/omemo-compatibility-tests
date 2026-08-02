@@ -31,14 +31,15 @@ Layer 5: Static vendor control-flow audit (pinned source)
 ## Implementation Proxies
 
 Gradle runners (`conversations`, `monal`, `siskin`) use **Smack 4.4.8 + smack-omemo-signal**
-(`LegacyOmemoWireClient`). Vendor trees are compile-time pins and `VENDOR_REV` logging — not
-native AxolotlService / MLOMEMO / MartinOMEMO on Linux CI today.
+(`LegacyOmemoWireClient`). On macOS, prefer vendor-native wire (`native_left` / `native_right` in
+`config/interop-matrix.yaml`). Set `OMEMO_FORCE_SMACK_PROXY=1` to keep Smack for debugging.
+Smack proxies are scheduled for removal once native matrix is green.
 
 | Target native stack | Wire proxy today | Native bridge path |
 |---------------------|------------------|-------------------|
-| Conversations axolotl | Smack Gradle `conversations` | `interop/android/` (needs `ANDROID_HOME`) |
-| Monal MLOMEMO | Smack Gradle `monal` | `interop/monal-native/` (macOS ObjC) |
-| Siskin MartinOMEMO | Smack Gradle `siskin` | Swift/TigaseSwift (not wired on Linux) |
+| Conversations axolotl | Smack Gradle `conversations` (deprecated) | `interop/android/` (`ANDROID_HOME`) |
+| Monal MLOMEMO | Smack Gradle `monal` (deprecated on macOS) | `interop/monal-native/` (macOS ObjC) |
+| Siskin MartinOMEMO | Smack Gradle `siskin` (deprecated on macOS) | `interop/siskin-native/` (macOS Swift) |
 | Reference | slixmpp-omemo + python-oldmemo | In-memory harness |
 
 `wire_client.py` routes `monal_native` and `monal_family` to Gradle proxies when built.
