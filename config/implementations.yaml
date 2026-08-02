@@ -1,49 +1,68 @@
-# Upstream OMEMO-related implementations to clone and test.
-# Paths are relative to vendor/
+# Upstream implementations — legacy OMEMO focus (eu.siacs.conversations.axolotl)
+
+namespace: eu.siacs.conversations.axolotl
 
 implementations:
   - id: python-omemo
-    description: Core OMEMO protocol library (XEP-0384)
+    description: Core OMEMO protocol library (backends include oldmemo)
     repo: https://github.com/Syndace/python-omemo.git
     branch: main
     type: library
-  - id: python-twomemo
-    description: OMEMO 2 backend (urn:xmpp:omemo:2) — Monal, Dino, modern clients
-    repo: https://github.com/Syndace/python-twomemo.git
-    branch: main
-    type: library
+
   - id: python-oldmemo
-    description: Legacy OMEMO backend (eu.siacs.conversations.axolotl) — Conversations
+    description: Legacy OMEMO backend — same namespace as Conversations and Monal
     repo: https://github.com/Syndace/python-oldmemo.git
     branch: main
     type: library
+
   - id: slixmpp-omemo
-    description: Slixmpp OMEMO plugin — wire-format client proxy
+    description: Slixmpp OMEMO plugin (reference wire client)
     repo: https://github.com/Syndace/slixmpp-omemo.git
     branch: main
     type: library
+
   - id: ejabberd
-    description: ejabberd XMPP server (reference + Docker image)
+    description: ejabberd XMPP server
     repo: https://github.com/processone/ejabberd.git
     branch: master
     type: server
     clone_only: true
+
   - id: conversations
-    description: Conversations Android client (reference; unit tests require Android SDK)
-    repo: https://github.com/siacs/Conversations.git
+    description: Conversations Android client — legacy axolotl OMEMO
+    repo: https://codeberg.org/iNPUTmice/Conversations.git
     branch: master
     type: client
-    optional: true
-    clone_only: true
+    namespace: eu.siacs.conversations.axolotl
+    wire_runner: conversations
+    crypto_paths:
+      - src/main/java/eu/siacs/conversations/crypto/axolotl
+      - src/main/java/im/conversations/android/xmpp/model/axolotl
+
   - id: monal
-    description: Monal iOS client (reference; requires Xcode)
+    description: Monal iOS client — legacy axolotl OMEMO (not OMEMO 2)
     repo: https://github.com/monal-im/Monal.git
     branch: main
     type: client
-    optional: true
-    clone_only: true
+    namespace: eu.siacs.conversations.axolotl
+    wire_runner: monal
+    crypto_paths:
+      - Monal/Classes/MLOMEMO.m
+      - Monal/Classes/MLSignalStore.m
+      - Monal/Classes/AESGcm.m
 
-# Commands run from each implementation directory after pip install -e .
+  # OMEMO 2 backends — optional, not used in default interop matrix
+  - id: python-twomemo
+    description: OMEMO 2 (urn:xmpp:omemo:2) — excluded from default interop
+    repo: https://github.com/Syndace/python-twomemo.git
+    branch: main
+    type: library
+    optional: true
+
 upstream_test_commands:
   python-omemo: "pip install -e '.[dev]' -q && python3 -m pytest tests/ -q"
   slixmpp-omemo: "pip install -e '.[test]' -q && python3 -m pytest tests/ -q"
+
+client_build_commands:
+  conversations: "cd interop/clients && ./gradlew :conversations:installDist -q"
+  monal: "cd interop/clients && ./gradlew :monal:installDist -q"

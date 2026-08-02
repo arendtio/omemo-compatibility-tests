@@ -1,0 +1,203 @@
+#!/usr/bin/env python3
+"""Run legacy OMEMO client interop matrix over ejabberd."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+MATRIX = ROOT / "config" / "interop-matrix.yaml"
+CLIENTS_DIR = ROOT / "interop" / "clients"
+
+
+def run(cmd: list[str], env: dict | None = None, timeout: int = 120) -> int:
+    print(f"$ {' '.join(cmd)}")
+    merged = os.environ.copy()
+    if env:
+        merged.update(env)
+    merged["OMEMO_INTEROP_ROOT"] = str(ROOT)
+    try:
+        return subprocess.call(cmd, cwd=ROOT, env=merged, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print("TIMEOUT")
+        return 124
+
+
+def gradle_client_task(client_id: str) -> str:
+    return f":{client_id}:installDist"
+
+
+def client_launcher(client_id: str) -> Path:
+    return CLIENTS_DIR / client_id / "build" / "install" / client_id / "bin" / client_id
+
+
+def build_clients(client_ids: set[str]) -> int:
+    tasks = [gradle_client_task(c) for c in sorted(client_ids)]
+    gradlew = CLIENTS_DIR / "gradlew"
+    if not gradlew.exists():
+        print("Gradle wrapper missing in interop/clients", file=sys.stderr)
+        return 1
+    return run([str(gradlew), *tasks, "-q"], cwd=CLIENTS_DIR)
+
+
+def run_client(
+    client_id: str,
+    mode: str,
+    jid: str,
+    password: str,
+    peer: str | None = None,
+    send: str | None = None,
+    expect: str | None = None,
+    data_dir: Path | None = None,
+) -> int:
+    launcher = client_launcher(client_id)
+    if not launcher.exists():
+        print(f"Client binary missing: {launcher}", file=sys.stderr)
+        return 1
+
+    d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
+    d.mkdir(parents=True, exist_ok=True)
+
+    args = [
+        str(launcher),
+        "--mode", mode,
+        "--",
+        "--jid", jid,
+        "--password", password,
+        "--host", "127.0.0.1",
+        "--port", "5222",
+        "--data-dir", str(d),
+    ]
+    if peer:
+        args = [
+            str(launcher),
+            "--mode", mode,
+            "--peer", peer,
+            *(["--send", send] if send else []),
+            *(["--expect", expect] if expect else []),
+            "--",
+            "--jid", jid,
+            "--password", password,
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(d),
+        ]
+    return run(args, timeout=90)
+
+
+def scenario_alice_sends_bob_replies(left: str, right: str) -> int:
+    alice_jid = "alice@localhost"
+    bob_jid = "bob@localhost"
+    tag = f"{left}-to-{right}"
+
+    bob_proc = subprocess.Popen(
+        [
+            str(client_launcher(right)),
+            "--mode", "wait",
+            "--expect", f"hello-{tag}",
+            "--",
+            "--jid", bob_jid,
+            "--password", "bobpass",
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(ROOT / "tmp" / "wire-data" / right / "bob"),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT)},
+    )
+    time.sleep(3)
+
+    rc = run_client(
+        left, "send",
+        alice_jid, "alicepass",
+        peer=bob_jid,
+        send=f"hello-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+
+    try:
+        bob_rc = bob_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+    if bob_rc != 0:
+        return bob_rc
+
+    # Bob replies
+    alice_proc = subprocess.Popen(
+        [
+            str(client_launcher(left)),
+            "--mode", "wait",
+            "--expect", f"reply-{tag}",
+            "--",
+            "--jid", alice_jid,
+            "--password", "alicepass",
+            "--host", "127.0.0.1",
+            "--port", "5222",
+            "--data-dir", str(ROOT / "tmp" / "wire-data" / left / "alice"),
+        ],
+        cwd=ROOT,
+        env={**os.environ, "OMEMO_INTEROP_ROOT": str(ROOT)},
+    )
+    time.sleep(1)
+    rc = run_client(
+        right, "send",
+        bob_jid, "bobpass",
+        peer=alice_jid,
+        send=f"reply-{tag}",
+        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+    )
+    if rc != 0:
+        alice_proc.kill()
+        return rc
+    try:
+        return alice_proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
+        return 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run OMEMO client interop matrix")
+    parser.add_argument("--pair", default="conversations-vs-monal")
+    parser.add_argument("--build", action="store_true", help="Build client runners first")
+    args = parser.parse_args()
+
+    with open(MATRIX, encoding="utf-8") as f:
+        matrix = yaml.safe_load(f)
+
+    pair = next(p for p in matrix["pairs"] if p["id"] == args.pair)
+    clients = {pair["left"], pair["right"]}
+
+    if args.build or not all(client_launcher(c).exists() for c in clients):
+        rc = build_clients(clients)
+        if rc != 0:
+            return rc
+
+    for scenario in pair["scenarios"]:
+        print(f"\n=== Scenario: {scenario} ({pair['id']}) ===")
+        if scenario in {"alice_sends_bob_replies", "cross_session_roundtrip"}:
+            rc = scenario_alice_sends_bob_replies(pair["left"], pair["right"])
+        else:
+            print(f"Unknown scenario: {scenario}")
+            return 1
+        if rc != 0:
+            print(f"FAIL scenario {scenario}")
+            return rc
+        print(f"PASS scenario {scenario}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,4 +1,8 @@
-"""Multi-device OMEMO fan-out compatibility."""
+"""Multi-device tests (OMEMO 2 — optional)."""
+
+import pytest
+
+pytestmark = pytest.mark.omemo2
 
 import pytest
 import twomemo

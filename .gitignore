@@ -1,4 +1,7 @@
 vendor/
+tmp/
+.gradle/
+**/build/
 .pytest_cache/
 *.pyc
 __pycache__/

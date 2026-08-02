@@ -1,30 +1,20 @@
-# Command Registry
+## Build Commands
 
-All approved commands for this project.
-
-## Setup
-
-- `pip install -e ".[dev]"` — Install suite dependencies and harness
-- `python3 scripts/download-implementations.py` — Clone/update upstream implementations into `vendor/`
-- `python3 scripts/download-implementations.py --skip-optional` — Skip large optional client repos
+- `pip install -e ".[dev]"` — Install suite dependencies
+- `python3 scripts/download-implementations.py` — Clone/update vendor trees
+- `python3 scripts/download-implementations.py --ref conversations=2.20.1` — Pin client version
+- `./scripts/build-clients.sh` — Build Conversations + Monal wire runners (JDK 17+)
 
 ## Test Commands
 
-- `./scripts/run-suite.sh` — Full suite: download, upstream unit tests, local interoperability tests
-- `./scripts/run-suite.sh --local-only` — Skip upstream and wire tests; run local pytest only
-- `./scripts/run-suite.sh --upstream` — Run upstream unit tests in `vendor/`
-- `./scripts/run-suite.sh --wire` — Include Docker ejabberd wire tests
-- `python3 -m pytest tests/ -v` — Local interoperability tests only
-- `python3 -m pytest tests/ -v -m wire` — Wire tests only (requires running ejabberd)
-- `python3 -m pytest tests/ -v -m "not wire"` — Exclude wire tests
+- `python3 -m pytest tests/ -v -m "not wire and not omemo2"` — Default legacy suite
+- `python3 -m pytest tests/ -v -m wire` — Wire tests (ejabberd required)
+- `python3 -m pytest tests/ -v -m omemo2` — Optional OMEMO 2 tests
+- `./scripts/run-suite.sh` — Download + upstream + legacy tests
+- `./scripts/run-suite.sh --wire` — Includes client matrix over ejabberd
+- `python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build` — Client interop only
 
-## Docker (wire tests)
+## Docker
 
-- `docker compose -f docker/ejabberd/docker-compose.yml up -d` — Start ejabberd
-- `docker compose -f docker/ejabberd/docker-compose.yml down` — Stop ejabberd
-
-## Expected Outputs
-
-- Successful local run: pytest exit code 0, all non-wire tests green
-- Wire tests without Docker: skipped with reason "docker not available" or "ejabberd not reachable"
-- Upstream failure: script reports implementation id and subprocess exit code
+- `docker compose -f docker/ejabberd/docker-compose.yml up -d`
+- `docker compose -f docker/ejabberd/docker-compose.yml down`

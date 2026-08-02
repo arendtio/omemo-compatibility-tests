@@ -1,4 +1,8 @@
-"""Cross-backend tests: oldmemo (Conversations) vs twomemo (Monal/Dino)."""
+"""Cross-backend tests (OMEMO 2 / twomemo — optional, not default legacy interop)."""
+
+import pytest
+
+pytestmark = pytest.mark.omemo2
 
 import xml.etree.ElementTree as ET
 from typing import Callable, List, Optional

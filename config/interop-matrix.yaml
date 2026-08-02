@@ -1,0 +1,58 @@
+# Legacy OMEMO (eu.siacs.conversations.axolotl) interoperability matrix.
+# OMEMO 2.0 (urn:xmpp:omemo:2) is intentionally excluded until implementations stabilize.
+
+namespace: eu.siacs.conversations.axolotl
+namespace_uri: "eu.siacs.conversations.axolotl"
+
+# Wire interop pairs — each side uses code from the checked-out vendor tree.
+pairs:
+  - id: conversations-vs-monal
+    description: Conversations Android crypto stack vs Monal iOS crypto stack
+    left: conversations
+    right: monal
+    scenarios:
+      - alice_sends_bob_replies
+      - bob_sends_alice_replies
+
+  - id: conversations-vs-conversations
+    description: Sanity check — two sessions using Conversations implementation
+    left: conversations
+    right: conversations
+    scenarios:
+      - cross_session_roundtrip
+
+  - id: monal-vs-monal
+    description: Sanity check — two sessions using Monal implementation
+    left: monal
+    right: monal
+    scenarios:
+      - cross_session_roundtrip
+
+# Client runner definitions (see interop/clients/)
+clients:
+  conversations:
+    vendor_id: conversations
+    implementation: conversations
+    runner: interop/clients/conversations
+    main_class: org.omemo.interop.conversations.ConversationsWireClient
+    platform: [linux, macos]
+    notes: >
+      Compiles against vendor/conversations via Gradle; uses Conversations axolotl
+      wire format (signal-protocol-java 2.6.2). Requires JDK 17+.
+
+  monal:
+    vendor_id: monal
+    implementation: monal
+    runner: interop/clients/monal
+    main_class: org.omemo.interop.monal.MonalWireClient
+    platform: [linux, macos]
+    notes: >
+      Uses Monal-linked libsignal stack from vendor/monal (SignalProtocolC fork).
+      On macOS also builds monal-native ObjC runner from vendor MLOMEMO sources.
+
+  slixmpp-oldmemo:
+    vendor_id: slixmpp-omemo
+    implementation: slixmpp-oldmemo
+    runner: python
+    platform: [linux, macos]
+    notes: Reference Python client (oldmemo only) for protocol debugging.

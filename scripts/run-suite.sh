@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OMEMO interoperability test orchestrator.
+# OMEMO interoperability test orchestrator (legacy OMEMO focus).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,12 +23,11 @@ for arg in "$@"; do
   esac
 done
 
-# Default: run everything except wire (wire requires --wire)
 if [[ "$RUN_UPSTREAM" == false && "$RUN_WIRE" == false && "$RUN_LOCAL" == true ]]; then
   RUN_UPSTREAM=true
 fi
 
-echo "=== OMEMO Interop Suite ==="
+echo "=== OMEMO Interop Suite (legacy axolotl) ==="
 
 if [[ "$SKIP_DOWNLOAD" == false ]]; then
   echo "--- Downloading implementations ---"
@@ -49,20 +48,22 @@ if [[ "$RUN_WIRE" == true ]]; then
     docker compose -f docker/ejabberd/docker-compose.yml up -d --wait 2>/dev/null || \
       docker compose -f docker/ejabberd/docker-compose.yml up -d
     sleep 5
-    WIRE_MARKER="-m wire"
-  else
-    echo "Docker not available; wire tests will be skipped by pytest"
-    WIRE_MARKER="-m wire"
   fi
+  echo "--- Building legacy wire clients ---"
+  ./scripts/build-clients.sh
+  if python3 -c "import socket; s=socket.create_connection(('127.0.0.1',5222),2); s.close()" 2>/dev/null; then
+    echo "--- Client interop matrix ---"
+    python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build
+  fi
+  PYTEST_MARK="-m wire"
 else
-  WIRE_MARKER="-m 'not wire'"
+  PYTEST_MARK="-m 'not wire and not omemo2'"
 fi
 
-echo "--- Local interoperability tests ---"
-eval "python3 -m pytest tests/ -v ${WIRE_MARKER}"
+echo "--- Tests (${PYTEST_MARK}) ---"
+eval "python3 -m pytest tests/ -v ${PYTEST_MARK}"
 
 if [[ "$RUN_WIRE" == true ]] && command -v docker >/dev/null 2>&1; then
-  echo "--- Stopping ejabberd ---"
   docker compose -f docker/ejabberd/docker-compose.yml down
 fi
 

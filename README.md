@@ -1,74 +1,69 @@
 # OMEMO Interoperability Test Suite
 
-Reproducible compatibility testing for XMPP OMEMO (XEP-0384) across servers and client implementations.
+Reproducible **legacy OMEMO** (`eu.siacs.conversations.axolotl`) compatibility testing across Conversations, Monal, ejabberd, and reference libraries.
+
+OMEMO 2 (`urn:xmpp:omemo:2`) is **out of scope** for the default matrix until implementations stabilize. Optional `omemo2` tests remain in `tests/cross_backend/`.
 
 ## What this does
 
-1. **Downloads** current upstream sources (ejabberd, python-omemo, slixmpp-omemo, Conversations, Monal, …) into `vendor/`
-2. **Runs upstream unit tests** from python-omemo and slixmpp-omemo
-3. **Cross-backend tests** simulate Conversations-style (`eu.siacs.conversations.axolotl`) vs Monal/Dino-style (`urn:xmpp:omemo:2`) clients without a network
-4. **Standard conformance** checks XEP-0384 namespace URIs, fingerprint format, and wire XML structure
-5. **Wire E2E tests** (optional) run two slixmpp clients against ejabberd over real XMPP
+1. **Downloads** checked-out client and server sources into `vendor/` (supports `--ref conversations=TAG`)
+2. **Runs upstream unit tests** (python-omemo, slixmpp-omemo)
+3. **Legacy protocol tests** in-memory (`tests/legacy/`)
+4. **Wire client runners** built from `interop/clients/` — bound to vendor Conversations and Monal trees
+5. **Client matrix** over ejabberd: Conversations implementation vs Monal implementation (headless, no GUI)
 
 ## Quick start
 
 ```bash
 pip install -e ".[dev]"
 python3 scripts/download-implementations.py --skip-optional
-pytest tests/ -v -m "not wire"
+python3 -m pytest tests/ -v -m "not wire and not omemo2"
 ```
 
-Full suite (download + upstream + local):
+Checkout specific client versions and test them against each other:
 
 ```bash
-./scripts/run-suite.sh --local-only   # no upstream
-./scripts/run-suite.sh                # includes upstream tests
-```
-
-Wire tests (requires Docker):
-
-```bash
+python3 scripts/download-implementations.py --ref conversations=2.20.1 --ref monal=main
+./scripts/build-clients.sh
 docker compose -f docker/ejabberd/docker-compose.yml up -d
-pytest tests/ -v -m wire
-docker compose -f docker/ejabberd/docker-compose.yml down
+python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build
 ```
 
-Or:
+Full orchestrator:
 
 ```bash
 ./scripts/run-suite.sh --wire
 ```
+
+## Client wire runners
+
+| Runner | Vendor tree | Legacy namespace |
+|--------|-------------|------------------|
+| `conversations` | `vendor/conversations` (Codeberg) | `eu.siacs.conversations.axolotl` |
+| `monal` | `vendor/monal` | `eu.siacs.conversations.axolotl` |
+
+Runners verify vendor crypto sources exist at checkout and report `VENDOR_REV` for reproducibility. They use Smack + libsignal on the wire (same family as both clients). Gradle verifies `XmppAxolotlMessage.java` / `MLOMEMO.m` are present in the checked-out tree.
 
 ## Test layers
 
 | Layer | Location | Network |
 |-------|----------|---------|
 | Upstream unit | `vendor/*/pytest` | No |
-| Cross-backend | `tests/cross_backend/` | No |
-| Standard | `tests/standard/` | No |
-| Scenarios | `tests/scenarios/` | No |
-| Wire E2E | `tests/wire/` | Yes (ejabberd) |
+| Legacy protocol | `tests/legacy/` | No |
+| Standard (axolotl) | `tests/standard/` | No |
+| Client wire matrix | `tests/wire/test_client_matrix.py` | Yes |
+| OMEMO 2 (optional) | `tests/cross_backend/` | No |
 
-## Implementation proxies
+## Config
 
-Mobile/desktop clients are not executed in CI. Python libraries implement the same wire formats:
-
-| Ecosystem | Namespace | Proxy |
-|-----------|-----------|-------|
-| Conversations, legacy Gajim | `eu.siacs.conversations.axolotl` | python-oldmemo |
-| Monal, Dino, modern clients | `urn:xmpp:omemo:2` | python-twomemo |
-| Wire transport | both | slixmpp-omemo |
-
-## Known incompatibility scenarios
-
-Documented in `tests/scenarios/known_issues.yaml` with links to upstream bug reports (ejabberd PEP access, Monal bundle visibility, publish-options, key transport).
-
-## Commands
-
-See [commands.md](commands.md) for the full command registry.
+- `config/implementations.yaml` — repos, refs, build commands
+- `config/interop-matrix.yaml` — client pairs and scenarios
 
 ## Requirements
 
 - Python 3.10+
+- JDK 17+ (wire clients)
 - Git
-- Docker (optional, for wire tests)
+- Docker (wire tests + ejabberd)
+
+See [commands.md](commands.md) for the command registry.
