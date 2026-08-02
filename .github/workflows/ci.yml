@@ -116,6 +116,9 @@ jobs:
       - name: Native pytest (Conversations)
         run: python3 -m pytest tests/native/test_conversations_native_crypto.py -v -m native
 
+      - name: Vendor XML contract unit test
+        run: cd interop/android && ./gradlew :conv-native:testDebugUnitTest --tests "eu.siacs.conversations.crypto.axolotl.ConversationsVendorXmlContractTest" --no-daemon -q
+
   server-matrix-prosody:
     runs-on: ubuntu-latest
     steps:

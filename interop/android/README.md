@@ -19,6 +19,7 @@ Requires Android SDK + `ANDROID_HOME`.
 export ANDROID_HOME=...
 ./scripts/build-conversations-native.sh
 cd interop/android && ./gradlew :conv-native:conversationsCryptoWire -PwireMode=local_roundtrip
+python3 scripts/run-native-wire-matrix.py --pair conversations-vs-conversations  # live XMPP
 ```
 
 ## Siskin / MartinOMEMO / Monal

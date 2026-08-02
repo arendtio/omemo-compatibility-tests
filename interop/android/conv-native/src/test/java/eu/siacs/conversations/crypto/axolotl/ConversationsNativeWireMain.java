@@ -1,5 +1,6 @@
 package eu.siacs.conversations.crypto.axolotl;
 
+import eu.siacs.conversations.wire.NativeWireClient;
 import eu.siacs.conversations.xml.Element;
 
 /**
@@ -10,10 +11,10 @@ public final class ConversationsNativeWireMain {
     private ConversationsNativeWireMain() {}
 
     public static void main(String[] args) throws Exception {
-        runMode(System.getProperty("wire.mode", "local_roundtrip"));
+        runMode(System.getProperty("wire.mode", "local_roundtrip"), args);
     }
 
-    static void runMode(String mode) throws Exception {
+    static void runMode(String mode, String[] clientArgs) throws Exception {
         switch (mode) {
             case "local_roundtrip":
                 String plaintext = ConversationsNativeRoundtrip.roundtrip("native-wire-roundtrip");
@@ -27,6 +28,15 @@ public final class ConversationsNativeWireMain {
                 Element wire = ConversationsNativeRoundtrip.exportVendorXml("slixmpp-cross-decrypt-body");
                 System.out.println("VENDOR_XML=" + wire.toString());
                 System.out.println("RUNNER=conversations_android_crypto NATIVE=VENDOR_AXOLOTL");
+                return;
+            case "send":
+            case "wait":
+            case "send-wait":
+                System.setProperty("wire.mode", mode);
+                int code = NativeWireClient.runScenario(clientArgs);
+                if (code != 0) {
+                    throw new IllegalStateException("native wire failed with code " + code);
+                }
                 return;
             default:
                 throw new IllegalArgumentException("Unknown wire.mode=" + mode);

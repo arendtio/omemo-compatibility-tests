@@ -64,6 +64,14 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    val smackVersion = "4.4.8"
+    testImplementation("org.igniterealtime.smack:smack-tcp:$smackVersion")
+    testImplementation("org.igniterealtime.smack:smack-extensions:$smackVersion")
+    testImplementation("org.igniterealtime.smack:smack-im:$smackVersion")
+    testRuntimeOnly("org.igniterealtime.smack:smack-xmlparser-stax:$smackVersion")
+    testRuntimeOnly("org.igniterealtime.smack:smack-java8:$smackVersion")
     testImplementation("org.whispersystems:signal-protocol-java:2.6.2")
     testImplementation("com.google.guava:guava:33.6.0-android")
     testImplementation("androidx.appcompat:appcompat:1.7.1")
@@ -111,4 +119,12 @@ tasks.register<Test>("conversationsCryptoWire") {
         showStandardStreams = true
     }
     systemProperty("wire.mode", findProperty("wireMode")?.toString() ?: "local_roundtrip")
+    findProperty("wireJid")?.let { systemProperty("wire.jid", it.toString()) }
+    findProperty("wirePassword")?.let { systemProperty("wire.password", it.toString()) }
+    findProperty("wireHost")?.let { systemProperty("wire.host", it.toString()) }
+    findProperty("wirePort")?.let { systemProperty("wire.port", it.toString()) }
+    findProperty("wirePeer")?.let { systemProperty("wire.peer", it.toString()) }
+    findProperty("wireSend")?.let { systemProperty("wire.send", it.toString()) }
+    findProperty("wireExpect")?.let { systemProperty("wire.expect", it.toString()) }
+    findProperty("wireDataDir")?.let { systemProperty("wire.dataDir", it.toString()) }
 }
