@@ -38,7 +38,7 @@ findings:
     symptom: Message encrypts for subset of devices; peers cannot decrypt
     source_paths:
       - vendor/MartinOMEMO/Sources/MartinOMEMO/OMEMOModule.swift
-    pattern: "_encode maps encrypt failures to nil and filters; addresses() swallows PEP failure"
+    pattern: "_encrypt compactMap returns nil on encrypt catch; addresses() try? swallows PEP failure"
     minimal_fix: "Throw on encrypt failure; propagate PEP errors; verify expected ⊆ encoded"
     linked_issues:
       - https://github.com/tigase/siskin-im/issues/162
@@ -53,7 +53,7 @@ findings:
     title: Device may be announced when bundle publish path treats errors as success
     source_paths:
       - vendor/MartinOMEMO/Sources/MartinOMEMO/OMEMOModule.swift
-    pattern: "publishDeviceBundleIfNeeded non-item_not_found errors return without throw"
+    pattern: "publishDeviceBundleIfNeeded catches XMPPError; non-item_not_found/internal_server_error returns without throw"
     minimal_fix: "Propagate XMPP errors; reconfigure bundle node on precondition-not-met"
     tests:
       - tests/compatibility/test_source_control_flow_audit.py::test_siskin_bundle_publish_error_handling
@@ -90,9 +90,88 @@ findings:
     severity: P1
     category: control_flow
     aligned: true
-    note: "Conversations and MartinOMEMO try all keys with matching rid; Monal uses findFirst (see monal audit)"
+    note: "Conversations and MartinOMEMO try all keys with matching rid; Monal uses findFirst (see monal_same_rid_findfirst)"
     tests:
       - tests/compatibility/test_audit_regression_fixtures.py::test_multiple_keys_same_rid_collects_candidates
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_decrypt_uses_findfirst_for_rid
+
+  - id: partial_send_monal
+    severity: P0
+    aligned: false
+    category: control_flow
+    title: Monal continues on per-device encrypt failure
+    symptom: Message envelope returned even when some device keys fail
+    source_paths:
+      - vendor/monal/Monal/Classes/MLOMEMO.m
+    pattern: "addEncryptionKeyForAllDevices continues on error; encryptString still returns envelope"
+    minimal_fix: "Fail send when expected remote devices lack keys in header"
+    linked_issues:
+      - https://github.com/monal-im/Monal/issues/240
+    tests:
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_partial_send_add_encryption_continues_on_error
+
+  - id: monal_self_device_filter_not_jid_scoped
+    severity: P1
+    aligned: false
+    category: control_flow
+    title: Monal skips own device by id only, not JID
+    symptom: Foreign JID with same device id incorrectly skipped in trust check
+    source_paths:
+      - vendor/monal/Monal/Classes/MLOMEMO.m
+    pattern: "checkTrustOfAllDevices compares device.unsignedIntValue to local deviceid only"
+    minimal_fix: "Compare full SignalAddress (jid + device id)"
+    linked_issues:
+      - https://github.com/monal-im/Monal/issues/240
+    tests:
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_self_device_filter_not_jid_scoped
+
+  - id: monal_same_rid_findfirst
+    severity: P1
+    aligned: false
+    category: control_flow
+    title: Monal decrypt picks first matching rid key only
+    symptom: MUC duplicate rid may decrypt wrong key or fail
+    source_paths:
+      - vendor/monal/Monal/Classes/MLOMEMO.m
+    pattern: "findFirst on header/key with rid attribute"
+    minimal_fix: "Try all keys with matching rid like Conversations/MartinOMEMO"
+    tests:
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_decrypt_uses_findfirst_for_rid
+
+  - id: monal_devicelist_fetch_fakes_empty
+    severity: P2
+    aligned: false
+    category: control_flow
+    title: Monal fakes empty devicelist on own fetch error
+    source_paths:
+      - vendor/monal/Monal/Classes/MLOMEMO.m
+    pattern: "handleOwnDevicelistFetchError fakes empty devicelist"
+    minimal_fix: "Surface fetch failure; do not treat as zero devices"
+    tests:
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_devicelist_fetch_error_fakes_empty_list
+
+  - id: monal_carbon_mam_dedup_signal_error_3
+    severity: P2
+    aligned: false
+    category: control_flow
+    title: Monal treats Signal error code 3 as dedup without session repair
+    source_paths:
+      - vendor/monal/Monal/Classes/MLOMEMO.m
+    pattern: "error.code == 3 Deduplicated log path"
+    minimal_fix: "Distinguish true duplicates from stale-session duplicates"
+    tests:
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_duplicate_message_dedup_on_signal_error_3
+
+  - id: monal_trust_gating_on_send
+    severity: info
+    category: security
+    aligned: true
+    note: "Monal filters untrusted devices via acceptedTrustLevel before send (unlike Siskin isTrusted always true)"
+    source_paths:
+      - vendor/monal/Monal/Classes/MLOMEMO.m
+      - vendor/monal/Monal/Classes/MLSignalStore.m
+    tests:
+      - tests/compatibility/test_monal_control_flow_audit.py::test_monal_trust_gating_on_send
 
   - id: pep_open_access
     severity: P2
@@ -112,15 +191,18 @@ regression_matrix:
   - id: one_cipher_fails_no_wire_message
     covered: partial
   - id: foreign_jid_same_device_id
-    covered: false
-    note: Monal-specific; add when monal vendored
+    covered: static_only
+    note: Monal deviceid-only self filter; static audit in test_monal_self_device_filter_not_jid_scoped
   - id: muc_duplicate_rid
     covered: true
   - id: pep_precondition_not_met_retry
     covered: static_only
   - id: device_list_fetch_error_not_empty
     covered: static_only
+    note: Monal fakes empty list; MartinOMEMO try? returns []
   - id: compromised_identity_blocked
     covered: static_only
+    note: Monal acceptedTrustLevel; Siskin isTrusted always true
   - id: carbon_mam_duplicate
-    covered: false
+    covered: static_only
+    note: Monal Signal error code 3 dedup path

@@ -21,6 +21,6 @@ audits:
         note: "Siskin pins moving branch devel; clone explicitly for audit"
       monal:
         version: "6.4.21"
-        commit: null
+        commit: c69bd05ac245f8ba1e206e4185a3ca92607ecaa8
         path: vendor/monal
-        note: "Optional; not in default download set"
+        note: "Optional; clone for Monal static audit tests"

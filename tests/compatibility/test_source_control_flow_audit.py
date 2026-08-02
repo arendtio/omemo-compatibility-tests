@@ -53,31 +53,42 @@ def test_conversations_partial_send_pattern_documented() -> None:
 @pytest.mark.compatibility
 @pytest.mark.audit
 def test_siskin_partial_send_pattern_documented() -> None:
-    """P0: MartinOMEMO filters failed encrypt results out of header."""
+    """P0: MartinOMEMO drops failed session ciphers from header via compactMap nil."""
     text = _martin_omemo_text()
-    assert_pattern(text, r"case \.failure\(_\):\s*return nil", "_encode nil on failure")
-    assert_pattern(text, r"\.filter\(\{ \(el\) -> Bool in", "_encode filter nil keys")
+    assert_pattern(text, r"destinations\.compactMap\(\{ addr -> SignalSessionCipher\.Key\?", "compactMap encrypt per device")
+    assert_pattern(text, r"catch \{\s*self\.logger\.error", "encrypt catch logs error")
+    assert_pattern(text, r"return nil;\s*\}\s*\}\)\.compactMap", "encrypt catch returns nil before header compactMap")
+    assert_pattern(text, r"\.compactMap\(\{ \(key: SignalSessionCipher\.Key\) -> Element\?", "nil keys omitted from header")
 
 
 @pytest.mark.compatibility
 @pytest.mark.audit
 def test_siskin_pep_failure_swallowed_pattern() -> None:
-    """P0: addresses(for:) breaks on PEP failure instead of propagating."""
+    """P0: addresses(for:) uses try? on PEP fetch; failure yields empty device set."""
     text = _martin_omemo_text()
-    assert_pattern(text, r"case \.failure\(_\):\s*break", "PEP failure break in addresses")
+    assert_pattern(
+        text,
+        r"try\? await pubsubModule\.retrieveItems\(from: jid, for: OMEMOModule\.DEVICES_LIST_NODE",
+        "try? device-list retrieveItems",
+    )
+    assert_pattern(text, r"else \{\s*return \[\];", "empty addresses on missing/invalid list")
 
 
 @pytest.mark.compatibility
 @pytest.mark.audit
 def test_siskin_bundle_publish_error_handling() -> None:
-    """P1: unexpected bundle read errors are treated like missing bundle."""
+    """P1: unexpected bundle read errors are swallowed (return without throw)."""
     text = _martin_omemo_text()
     assert_pattern(
         text,
-        r"publishDeviceBundleIfNeeded.*?case \.failure\(let pubsubError\):",
-        "publishDeviceBundleIfNeeded failure branch",
+        r"publishDeviceBundleIfNeeded.*?catch let error as XMPPError",
+        "publishDeviceBundleIfNeeded XMPPError catch",
     )
-    assert_pattern(text, r"guard pubsubError\.error == \.item_not_found", "only some errors throw")
+    assert_pattern(
+        text,
+        r"guard error\.condition == \.item_not_found \|\| error\.condition == \.internal_server_error else \{\s*return;",
+        "non-item_not_found errors return without throw",
+    )
 
 
 @pytest.mark.compatibility
@@ -90,8 +101,46 @@ def test_siskin_istrusted_always_true() -> None:
 
 @pytest.mark.compatibility
 @pytest.mark.audit
+def test_martin_device_list_precondition_retry() -> None:
+    """Device-list publish reconfigures node on conflict (audit recommended for bundles too)."""
+    text = _martin_omemo_text()
+    assert_pattern(text, r"error\.condition == \.conflict", "device list conflict branch")
+    assert_pattern(text, r"configureNode\(at: jid, node: OMEMOModule\.DEVICES_LIST_NODE", "reconfigure device list")
+
+
+@pytest.mark.compatibility
+@pytest.mark.audit
+def test_martin_bundle_publish_lacks_precondition_retry() -> None:
+    """Audit gap: bundle publish has open access but no conflict/precondition retry loop."""
+    text = _martin_omemo_text()
+    assert_pattern(text, r"func publishDeviceBundle\(signedPreKey", "bundle publish exists")
+    assert_pattern(
+        text,
+        r"publishItem\(at: nil, to: bundleNode",
+        "bundle publishItem",
+    )
+    # Device list has conflict handling; bundle publish does not reference conflict.
+    assert "bundleNode" in text and ".conflict" in text
+    bundle_section = text.split("func publishDeviceBundle(signedPreKey", 1)[1][:2000]
+    assert ".conflict" not in bundle_section
+
+
+@pytest.mark.compatibility
+@pytest.mark.audit
+def test_conversations_bundle_precondition_retry() -> None:
+    """Conversations retries bundle publish after precondition-not-met."""
+    text = read_vendor(
+        "vendor/conversations/src/main/java/eu/siacs/conversations/crypto/axolotl/AxolotlService.java"
+    )
+    assert_pattern(text, r"preconditionNotMet\(response\)", "preconditionNotMet check")
+    assert_pattern(text, r"pushNodeConfiguration", "push node configuration")
+
+
+@pytest.mark.compatibility
+@pytest.mark.audit
 def test_compat_registry_lists_p0_findings(compat_findings: list[dict]) -> None:
     p0 = [f for f in compat_findings if f.get("severity") == "P0"]
     ids = {f["id"] for f in p0}
     assert "partial_send_conversations" in ids
     assert "partial_send_siskin" in ids
+    assert "partial_send_monal" in ids

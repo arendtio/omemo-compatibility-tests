@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Audit fixture: MUC may ship multiple <key rid="same"> candidates; receivers must try all. -->
+<encrypted xmlns="eu.siacs.conversations.axolotl">
+  <header sid="100">
+    <key rid="42">QUFB</key>
+    <key rid="42">QkJC</key>
+    <iv>MDEyMzQ1Njc4OTAx</iv>
+  </header>
+  <payload>Q0ND</payload>
+</encrypted>
