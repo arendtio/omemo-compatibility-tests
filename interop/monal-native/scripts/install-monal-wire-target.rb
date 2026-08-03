@@ -27,7 +27,7 @@ def normalize_monal_wire_target(target, info_plist)
     config.build_settings["INFOPLIST_FILE"] = info_plist
     config.build_settings["PRODUCT_NAME"] = "MonalWire"
     config.build_settings["WRAPPER_EXTENSION"] = "app"
-    config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "NO"
+    config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "$(inherited)"
     config.build_settings.delete("SWIFT_VERSION[sdk=iphoneos*]")
     config.build_settings.delete("SWIFT_VERSION[sdk=iphonesimulator*]")
   end
