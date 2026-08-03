@@ -120,4 +120,9 @@ def popen_monal_native_wire(
         "--port", str(port),
         "--data-dir", str(data_dir),
     ]
-    return subprocess.Popen(cmd, cwd=ROOT, env=monal_native_env())
+    log_path = data_dir / "wire-popen.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_file = open(log_path, "w")
+    return subprocess.Popen(
+        cmd, cwd=ROOT, env=monal_native_env(), stdout=log_file, stderr=subprocess.STDOUT,
+    )

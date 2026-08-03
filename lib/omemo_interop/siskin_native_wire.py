@@ -96,4 +96,7 @@ def popen_siskin_native_wire(
     env = os.environ.copy()
     env.setdefault("OMEMO_XMPP_SECURITY", "auto")
     env["OMEMO_INTEROP_ROOT"] = str(ROOT)
-    return subprocess.Popen(cmd, cwd=ROOT, env=env)
+    log_path = data_dir / "wire-popen.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_file = open(log_path, "w")
+    return subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)

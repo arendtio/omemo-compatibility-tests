@@ -126,9 +126,23 @@ def wait_boot(
     elif client_id == "conversations" and use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         time.sleep(35)
     elif use_native_wire(client_id, pair, as_matrix_left, native_conversations):
-        time.sleep(20)
+        if client_id in ("siskin_im", "monal"):
+            # MartinOMEMO / MLOMEMO: XMPP login + PEP bundle fetch can exceed 60s on CI.
+            time.sleep(120)
+        else:
+            time.sleep(20)
     else:
         time.sleep(12)
+
+
+NATIVE_WIRE_WAIT_TIMEOUT = 180
+
+
+def dump_wire_log(data_dir: Path) -> None:
+    log = data_dir / "wire-popen.log"
+    if log.is_file():
+        print(f"--- wire log {log} ---", flush=True)
+        print(log.read_text(encoding="utf-8", errors="replace"), flush=True)
 
 
 def invoke_client(
@@ -285,7 +299,7 @@ def scenario_bob_sends_alice_replies(
         return rc
 
     try:
-        alice_rc = alice_proc.wait(timeout=60)
+        alice_rc = alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         alice_proc.kill()
         return 1
@@ -308,7 +322,7 @@ def scenario_bob_sends_alice_replies(
         bob_proc.kill()
         return rc
     try:
-        return bob_proc.wait(timeout=60)
+        return bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         bob_proc.kill()
         return 1
@@ -339,11 +353,12 @@ def scenario_unicode_body_roundtrip(
         bob_proc.kill()
         return rc
     try:
-        bob_rc = bob_proc.wait(timeout=60)
+        bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         bob_proc.kill()
         return 1
     if bob_rc != 0:
+        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
         return bob_rc
 
     alice_proc = spawn_client(
@@ -362,7 +377,7 @@ def scenario_unicode_body_roundtrip(
         alice_proc.kill()
         return rc
     try:
-        return alice_proc.wait(timeout=60)
+        return alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         alice_proc.kill()
         return 1
@@ -413,11 +428,12 @@ def scenario_alice_sends_bob_replies(
         return rc
 
     try:
-        bob_rc = bob_proc.wait(timeout=60)
+        bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         bob_proc.kill()
         return 1
     if bob_rc != 0:
+        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
         return bob_rc
 
     alice_proc = spawn_client(
@@ -436,7 +452,7 @@ def scenario_alice_sends_bob_replies(
         alice_proc.kill()
         return rc
     try:
-        return alice_proc.wait(timeout=60)
+        return alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         alice_proc.kill()
         return 1
@@ -555,10 +571,14 @@ def main() -> int:
     if native_macos_wire_enabled() and (
         pair.get("native_left") or pair.get("native_right")
     ):
-        rc = build_siskin_native()
-        if rc != 0:
-            return rc
-        build_monal_native()
+        if not siskin_native_binary().exists():
+            rc = build_siskin_native()
+            if rc != 0:
+                return rc
+        if not monal_native_binary().exists():
+            rc = build_monal_native()
+            if rc != 0:
+                return rc
 
     clients_to_build = set()
     for c in clients:
