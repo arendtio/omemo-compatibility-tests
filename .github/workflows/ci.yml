@@ -209,6 +209,11 @@ jobs:
       - name: Conversations native proof
         run: ./scripts/build-conversations-native.sh
 
+      - name: Setup Docker (Colima)
+        run: |
+          brew install colima docker docker-compose
+          colima start --cpu 2 --memory 4
+
       - name: Start ejabberd
         run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
 
@@ -226,4 +231,6 @@ jobs:
 
       - name: Stop ejabberd
         if: always()
-        run: docker compose -f docker/ejabberd/docker-compose.yml down
+        run: |
+          docker compose -f docker/ejabberd/docker-compose.yml down || true
+          colima stop || true
