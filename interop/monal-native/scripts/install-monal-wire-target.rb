@@ -8,13 +8,15 @@ monal_dir = File.join(root, "vendor/monal/Monal")
 project_path = File.join(monal_dir, "Monal.xcodeproj")
 podfile_path = File.join(monal_dir, "Podfile")
 sources_dir = File.join(root, "interop/monal-native/Sources")
+info_plist = File.join(root, "interop/monal-native/MonalWire-Info.plist")
 
 unless File.directory?(monal_dir)
   warn "vendor/monal missing at #{monal_dir}"
   exit 1
 end
 
-def normalize_monal_wire_target(target)
+def normalize_monal_wire_target(target, info_plist)
+  target.product_type = "com.apple.product-type.application"
   target.build_configurations.each do |config|
     config.build_settings["SWIFT_VERSION"] = "5.0"
     config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "14.0"
@@ -22,6 +24,10 @@ def normalize_monal_wire_target(target)
     config.build_settings["GCC_PREFIX_HEADER"] = "MonalSourceCodePrefix.pch"
     config.build_settings["GCC_PRECOMPILE_PREFIX_HEADER"] = "YES"
     config.build_settings["HEADER_SEARCH_PATHS"] = "$(inherited) $(SRCROOT)/Classes $(SRCROOT)/monalxmpp"
+    config.build_settings["INFOPLIST_FILE"] = info_plist
+    config.build_settings["PRODUCT_NAME"] = "MonalWire"
+    config.build_settings["WRAPPER_EXTENSION"] = "app"
+    config.build_settings["ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES"] = "NO"
     config.build_settings.delete("SWIFT_VERSION[sdk=iphoneos*]")
     config.build_settings.delete("SWIFT_VERSION[sdk=iphonesimulator*]")
   end
@@ -32,7 +38,7 @@ existing = project.targets.find { |t| t.name == "MonalWire" }
 
 unless existing
   group = project.main_group.new_group("MonalWire", sources_dir)
-  target = project.new_target(:command_line_tool, "MonalWire", :ios, "14.0")
+  target = project.new_target(:application, "MonalWire", :ios, "14.0")
 
   %w[main.m MonalWireClient.m WireBootstrap.m].each do |src|
     file_ref = group.new_file(src)
@@ -50,14 +56,14 @@ unless existing
   sworim_ref = project.files.find { |f| f.path == "sworim.sqlite" }
   target.resources_build_phase.add_file_reference(sworim_ref) if sworim_ref
 
-  normalize_monal_wire_target(target)
+  normalize_monal_wire_target(target, info_plist)
 
   project.save
   existing = target
   puts "Added MonalWire target to Monal.xcodeproj"
 else
   puts "MonalWire target already present"
-  normalize_monal_wire_target(existing)
+  normalize_monal_wire_target(existing, info_plist)
   project.save
 end
 
@@ -73,7 +79,7 @@ scheme = <<~XML
           <BuildableReference
             BuildableIdentifier="primary"
             BlueprintIdentifier="#{existing.uuid}"
-            BuildableName="MonalWire"
+            BuildableName="MonalWire.app"
             BlueprintName="MonalWire"
             ReferencedContainer="container:Monal.xcodeproj">
           </BuildableReference>

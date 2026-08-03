@@ -94,9 +94,12 @@ xcodebuild \
   -quiet
 
 PRODUCTS="$DERIVED/Build/Products/Debug-${SDK}"
-WIRE_BIN="$PRODUCTS/MonalWire"
+WIRE_BIN="$PRODUCTS/MonalWire.app/MonalWire"
 if [[ ! -f "$WIRE_BIN" ]]; then
-  echo "MonalWire binary missing at $WIRE_BIN" >&2
+  WIRE_BIN="$PRODUCTS/MonalWire"
+fi
+if [[ ! -f "$WIRE_BIN" ]]; then
+  echo "MonalWire binary missing under $PRODUCTS" >&2
   exit 1
 fi
 
