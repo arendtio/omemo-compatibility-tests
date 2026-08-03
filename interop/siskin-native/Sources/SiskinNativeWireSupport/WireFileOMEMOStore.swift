@@ -3,12 +3,12 @@ import Martin
 import MartinOMEMO
 
 /// File-backed OMEMO stores for headless wire (mirrors Siskin DBOMEMOStore layout in JSON).
-final class WireFileOMEMOStore {
+public final class WireFileOMEMOStore {
 
-    let accountJid: String
-    let root: URL
+    public let accountJid: String
+    public let root: URL
 
-    init(accountJid: String, dataDir: URL) {
+    public init(accountJid: String, dataDir: URL) {
         self.accountJid = accountJid
         self.root = dataDir
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -316,12 +316,12 @@ final class WireSenderKeyStore: SignalSenderKeyStoreProtocol {
     func loadSenderKey(forAddress: SignalAddress?, groupId: String?) -> Data? { nil }
 }
 
-final class WireOMEMOStorage: SignalStorage {
+public final class WireOMEMOStorage: SignalStorage {
     weak var wireContext: Martin.Context?
     private var signalCtx: SignalContext?
-    let files: WireFileOMEMOStore
+    public let files: WireFileOMEMOStore
 
-    init(files: WireFileOMEMOStore) {
+    public init(files: WireFileOMEMOStore) {
         let session = WireSessionStore(files: files)
         let preKey = WirePreKeyStore(files: files)
         let signed = WireSignedPreKeyStore(files: files)
