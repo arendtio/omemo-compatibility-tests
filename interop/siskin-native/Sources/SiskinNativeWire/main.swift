@@ -69,7 +69,8 @@ struct SiskinNativeWireMain {
             print("NAMESPACE=eu.siacs.conversations.axolotl")
             print("RUNNER=siskin_native_martinomemo")
 
-            try await client.connect()
+            let remotePeer = peer.map { BareJID($0) }
+            try await client.connect(remotePeer: mode == "wait" ? remotePeer : nil)
 
             switch mode {
             case "send":
@@ -89,7 +90,11 @@ struct SiskinNativeWireMain {
                     fputs("wait requires --expect\n", stderr)
                     return 1
                 }
-                let ok = await client.awaitBody(expectBody, timeoutSeconds: 60)
+                guard let peer else {
+                    fputs("wait requires --peer (sender JID)\n", stderr)
+                    return 1
+                }
+                let ok = await client.awaitBody(expectBody, timeoutSeconds: 120)
                 await client.disconnect()
                 if ok {
                     print("OK")

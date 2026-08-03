@@ -283,6 +283,7 @@ def scenario_bob_sends_alice_replies(
 
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
         expect=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
@@ -308,6 +309,7 @@ def scenario_bob_sends_alice_replies(
 
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
         expect=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
@@ -339,6 +341,7 @@ def scenario_unicode_body_roundtrip(
 
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
         expect=hello,
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
@@ -363,6 +366,7 @@ def scenario_unicode_body_roundtrip(
 
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
         expect=reply,
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )
@@ -413,6 +417,7 @@ def scenario_alice_sends_bob_replies(
 
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
         expect=f"hello-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
@@ -438,6 +443,7 @@ def scenario_alice_sends_bob_replies(
 
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
         expect=f"reply-{tag}",
         data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
     )

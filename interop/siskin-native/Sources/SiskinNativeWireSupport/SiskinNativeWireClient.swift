@@ -14,6 +14,7 @@ public final class SiskinNativeWireClient {
     private let client = XMPPClient()
     private var omemoModule: OMEMOModule?
     private var messageModule: MessageModule?
+    private var chatManager: DefaultChatManager?
     private var storage: WireOMEMOStorage?
     private var messageCancellable: AnyCancellable?
     private var lastBody: String?
@@ -43,7 +44,7 @@ public final class SiskinNativeWireClient {
         return rev.isEmpty ? "unknown" : rev
     }
 
-    public func connect() async throws {
+    public func connect(remotePeer: BareJID? = nil) async throws {
         let files = WireFileOMEMOStore(accountJid: jid.description, dataDir: dataDir)
         let wireStorage = WireOMEMOStorage(files: files)
         guard let signalContext = SignalContext(withStorage: wireStorage) else {
@@ -58,6 +59,7 @@ public final class SiskinNativeWireClient {
 
         let chatStore = DefaultChatStore()
         let chatManager = DefaultChatManager(store: chatStore)
+        self.chatManager = chatManager
         let messages = MessageModule(chatManager: chatManager)
         messageModule = messages
 
@@ -96,6 +98,9 @@ public final class SiskinNativeWireClient {
         try client.login()
         try await waitUntilConnected(timeout: 60)
         try await waitUntilOmemoReady(timeout: 90)
+        if let remotePeer, let context = client.context {
+            chatManager.createChat(for: context, with: remotePeer)
+        }
         try await Task.sleep(nanoseconds: 2_000_000_000)
     }
 
