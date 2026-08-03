@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Install suite
         run: pip install -e ".[dev]"
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Install suite
         run: pip install -e ".[dev]"
@@ -214,13 +214,13 @@ jobs:
       - name: Conversations native proof
         run: ./scripts/build-conversations-native.sh
 
-      - name: Setup Docker (Colima)
-        run: |
-          brew install colima docker docker-compose
-          colima start --cpu 2 --memory 4
+      - name: Install ejabberd
+        run: brew install ejabberd
 
       - name: Start ejabberd
-        run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
+        run: ./scripts/start-ejabberd-interop.sh
+        env:
+          OMEMO_XMPP_SECURITY: disabled
 
       - name: Native Conversations vs Siskin MartinOMEMO matrix
         run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-siskin --native-conversations
@@ -236,6 +236,4 @@ jobs:
 
       - name: Stop ejabberd
         if: always()
-        run: |
-          docker compose -f docker/ejabberd/docker-compose.yml down || true
-          colima stop || true
+        run: ./scripts/stop-ejabberd-interop.sh

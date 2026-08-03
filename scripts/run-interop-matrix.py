@@ -453,6 +453,8 @@ def ejabberdctl_cmd() -> list[str]:
     os.environ["EJABBERD_CONFIG_PATH"] = config
     os.environ.setdefault("EJABBERD_NODE", "ejabberd@localhost")
     base = ["ejabberdctl"]
+    if os.name != "posix" or os.uname().sysname == "Darwin":
+        return base
     if shutil.which("sudo"):
         return ["sudo", "-E", *base]
     return base
