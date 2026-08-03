@@ -38,7 +38,7 @@ Smack proxies are scheduled for removal once native matrix is green.
 | Target native stack | Wire proxy today | Native bridge path |
 |---------------------|------------------|-------------------|
 | Conversations axolotl | Smack Gradle `conversations` (deprecated) | `interop/android/` (`ANDROID_HOME`) |
-| Monal MLOMEMO | Smack Gradle `monal` (deprecated on macOS) | `interop/monal-native/` (macOS ObjC) |
+| Monal MLOMEMO | Smack Gradle `monal` (deprecated on macOS) | `interop/monal-native/` (`MonalWire` CLI + `monalxmpp`) |
 | Siskin MartinOMEMO | Smack Gradle `siskin` (deprecated on macOS) | `interop/siskin-native/` (macOS Swift) |
 | Reference | slixmpp-omemo + python-oldmemo | In-memory harness |
 

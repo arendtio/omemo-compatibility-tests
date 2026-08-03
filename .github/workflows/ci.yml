@@ -203,7 +203,7 @@ jobs:
       - name: Siskin MartinOMEMO crypto tests
         run: cd interop/siskin-native && swift test
 
-      - name: Build Monal monalxmpp (wire CLI scaffold)
+      - name: Build Monal native wire (MonalWire CLI)
         run: ./scripts/build-monal-native.sh
 
       - name: Conversations native proof
@@ -214,6 +214,12 @@ jobs:
 
       - name: Native Conversations vs Siskin MartinOMEMO matrix
         run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-siskin --native-conversations
+        env:
+          OMEMO_XMPP_SECURITY: disabled
+          OMEMO_NATIVE_MACOS: "1"
+
+      - name: Native Conversations vs Monal MLOMEMO matrix
+        run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-monal --native-conversations
         env:
           OMEMO_XMPP_SECURITY: disabled
           OMEMO_NATIVE_MACOS: "1"

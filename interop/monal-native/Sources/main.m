@@ -1,0 +1,119 @@
+#import <Foundation/Foundation.h>
+#import "MonalWireClient.h"
+
+static void usage(void) {
+    fprintf(stderr, "Usage: MonalWire --mode <send|wait> [--peer JID] [--send BODY] [--expect BODY] -- --jid JID --password PASS [--host HOST] [--port PORT] [--data-dir PATH]\n");
+}
+
+int main(int argc, char* argv[]) {
+    @autoreleasepool {
+        NSString* mode = nil;
+        NSString* peer = nil;
+        NSString* sendBody = nil;
+        NSString* expectBody = nil;
+        NSString* jid = nil;
+        NSString* password = nil;
+        NSString* host = @"127.0.0.1";
+        int port = 5222;
+        NSString* dataDirPath = @"omemo-wire-data";
+
+        int split = -1;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--") == 0) {
+                split = i;
+                break;
+            }
+        }
+
+        int modeEnd = split >= 0 ? split : argc;
+        for (int i = 1; i < modeEnd; i++) {
+            if (strcmp(argv[i], "--mode") == 0 && i + 1 < modeEnd) {
+                mode = [NSString stringWithUTF8String:argv[++i]];
+            } else if (strcmp(argv[i], "--peer") == 0 && i + 1 < modeEnd) {
+                peer = [NSString stringWithUTF8String:argv[++i]];
+            } else if (strcmp(argv[i], "--send") == 0 && i + 1 < modeEnd) {
+                sendBody = [NSString stringWithUTF8String:argv[++i]];
+            } else if (strcmp(argv[i], "--expect") == 0 && i + 1 < modeEnd) {
+                expectBody = [NSString stringWithUTF8String:argv[++i]];
+            } else {
+                fprintf(stderr, "Unknown arg: %s\n", argv[i]);
+                return 1;
+            }
+        }
+
+        if (split >= 0) {
+            for (int i = split + 1; i < argc; i++) {
+                if (strcmp(argv[i], "--jid") == 0 && i + 1 < argc) {
+                    jid = [NSString stringWithUTF8String:argv[++i]];
+                } else if (strcmp(argv[i], "--password") == 0 && i + 1 < argc) {
+                    password = [NSString stringWithUTF8String:argv[++i]];
+                } else if (strcmp(argv[i], "--host") == 0 && i + 1 < argc) {
+                    host = [NSString stringWithUTF8String:argv[++i]];
+                } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+                    port = atoi(argv[++i]);
+                } else if (strcmp(argv[i], "--data-dir") == 0 && i + 1 < argc) {
+                    dataDirPath = [NSString stringWithUTF8String:argv[++i]];
+                } else {
+                    fprintf(stderr, "Unknown client arg: %s\n", argv[i]);
+                    return 1;
+                }
+            }
+        }
+
+        if (!jid || !password) {
+            usage();
+            return 1;
+        }
+
+        NSURL* dataDir = [NSURL fileURLWithPath:dataDirPath isDirectory:YES];
+        MonalWireClient* client = [[MonalWireClient alloc] initWithJid:jid
+                                                              password:password
+                                                                  host:host
+                                                                  port:port
+                                                               dataDir:dataDir];
+
+        printf("IMPLEMENTATION=monal\n");
+        printf("VENDOR_REV=%s\n", client.vendorRevision.UTF8String);
+        printf("NAMESPACE=eu.siacs.conversations.axolotl\n");
+        printf("RUNNER=monal_native_mlomemo\n");
+
+        NSError* err = nil;
+        if (![client connectWithTimeout:120 error:&err]) {
+            fprintf(stderr, "ERROR: connect failed: %s\n", err.localizedDescription.UTF8String);
+            return 1;
+        }
+
+        if ([mode isEqualToString:@"send"]) {
+            if (!peer || !sendBody) {
+                fprintf(stderr, "send requires --peer and --send\n");
+                return 1;
+            }
+            if (![client sendEncrypted:peer body:sendBody error:&err]) {
+                fprintf(stderr, "ERROR: send failed: %s\n", err.localizedDescription.UTF8String);
+                [client disconnect];
+                return 1;
+            }
+            [client disconnect];
+            printf("OK\n");
+            return 0;
+        }
+
+        if ([mode isEqualToString:@"wait"]) {
+            if (!expectBody) {
+                fprintf(stderr, "wait requires --expect\n");
+                return 1;
+            }
+            BOOL ok = [client awaitBody:expectBody timeout:60];
+            [client disconnect];
+            if (ok) {
+                printf("OK\n");
+                return 0;
+            }
+            fprintf(stderr, "TIMEOUT expected=%s\n", expectBody.UTF8String);
+            return 1;
+        }
+
+        fprintf(stderr, "Unknown mode: %s\n", mode.UTF8String);
+        return 1;
+    }
+}

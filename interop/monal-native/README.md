@@ -13,10 +13,17 @@ python3 scripts/download-implementations.py --ref monal=c69bd05ac245f8ba1e206e41
 ./scripts/build-monal-native.sh
 ```
 
+Requires macOS with Xcode, CocoaPods (`pod`), and the `xcodeproj` Ruby gem (installed
+automatically by the build script if missing).
+
 Produces:
 
-- `interop/monal-native/build/DerivedData` — `monalxmpp` framework build
-- `interop/monal-native/build/MonalWire` — headless CLI (when `MonalWire.xcodeproj` is present)
+- `interop/monal-native/build/DerivedData` — `monalxmpp` + `MonalWire` build tree
+- `interop/monal-native/build/MonalWire` — headless CLI (iphonesimulator, runs on Apple Silicon macOS hosts)
+- `interop/monal-native/build/Frameworks` — staged frameworks for `DYLD_LIBRARY_PATH`
+
+The build script adds a `MonalWire` target to `vendor/monal/Monal/Monal.xcodeproj` via
+`interop/monal-native/scripts/install-monal-wire-target.rb` (idempotent).
 
 ## Wire matrix
 
@@ -30,11 +37,10 @@ export OMEMO_XMPP_SECURITY=disabled
 python3 scripts/run-interop-matrix.py --pair conversations-native-vs-monal --native-conversations
 ```
 
-## MonalWire CLI (in progress)
+## MonalWire CLI
 
-`interop/monal-native/MonalWire/` will host a thin ObjC CLI similar to Conversations
-`NativeWireClient`: vendor `MLOMEMO` crypto + Smack or Martin transport. The build script already
-compiles `monalxmpp` from `vendor/monal/Monal/Monal.xcodeproj`.
+Sources live in `interop/monal-native/Sources/`. The CLI matches the shared wire argument
+shape (`--mode send|wait`, `--peer`, `--send`, `--expect`, `--jid`, `--password`, etc.).
 
 ## Removing Smack proxy
 

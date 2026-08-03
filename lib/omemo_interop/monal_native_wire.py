@@ -24,6 +24,23 @@ def monal_native_binary() -> Path:
     return BINARY
 
 
+def monal_native_frameworks_dir() -> Path:
+    return MONAL_NATIVE / "build" / "Frameworks"
+
+
+def monal_native_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env.setdefault("OMEMO_XMPP_SECURITY", "auto")
+    env["OMEMO_INTEROP_ROOT"] = str(ROOT)
+    frameworks = monal_native_frameworks_dir()
+    if frameworks.is_dir():
+        prev = env.get("DYLD_LIBRARY_PATH", "")
+        env["DYLD_LIBRARY_PATH"] = (
+            f"{frameworks}{os.pathsep}{prev}" if prev else str(frameworks)
+        )
+    return env
+
+
 def build_monal_native() -> int:
     if not native_macos_wire_enabled():
         return 0
@@ -62,10 +79,7 @@ def run_monal_native_wire(
         "--port", str(port),
         "--data-dir", str(data_dir),
     ]
-    env = os.environ.copy()
-    env.setdefault("OMEMO_XMPP_SECURITY", "auto")
-    env["OMEMO_INTEROP_ROOT"] = str(ROOT)
-    return subprocess.call(cmd, cwd=ROOT, env=env, timeout=timeout)
+    return subprocess.call(cmd, cwd=ROOT, env=monal_native_env(), timeout=timeout)
 
 
 def popen_monal_native_wire(
@@ -93,7 +107,4 @@ def popen_monal_native_wire(
         "--port", str(port),
         "--data-dir", str(data_dir),
     ]
-    env = os.environ.copy()
-    env.setdefault("OMEMO_XMPP_SECURITY", "auto")
-    env["OMEMO_INTEROP_ROOT"] = str(ROOT)
-    return subprocess.Popen(cmd, cwd=ROOT, env=env)
+    return subprocess.Popen(cmd, cwd=ROOT, env=monal_native_env())
