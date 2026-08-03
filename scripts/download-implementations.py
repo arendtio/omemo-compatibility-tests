@@ -31,29 +31,35 @@ def parse_refs(ref_args: list[str]) -> dict[str, str]:
     return refs
 
 
-def clone_or_update(repo: str, dest: Path, default_branch: str, ref: str | None) -> None:
-    target = ref or default_branch
+def looks_like_commit(ref: str) -> bool:
+    return len(ref) >= 7 and all(c in "0123456789abcdef" for c in ref.lower())
 
+
+def clone_or_update(repo: str, dest: Path, default_branch: str, ref: str | None) -> None:
     if dest.exists():
-        print(f"Updating {dest.name} -> {target}...")
+        print(f"Updating {dest.name} -> {ref or default_branch}...")
         if ref:
-            run(["git", "fetch", "origin", target], cwd=dest)
-            run(["git", "checkout", target], cwd=dest)
-            if not run(["git", "pull", "origin", target], cwd=dest):
-                pass
+            run(["git", "fetch", "origin", ref], cwd=dest)
+            run(["git", "checkout", ref], cwd=dest)
+            if not looks_like_commit(ref):
+                run(["git", "pull", "origin", ref], cwd=dest)
         else:
-            run(["git", "fetch", "--depth", "1", "origin", target], cwd=dest)
-            run(["git", "checkout", target], cwd=dest)
-            run(["git", "pull", "origin", target], cwd=dest)
+            run(["git", "fetch", "--depth", "1", "origin", default_branch], cwd=dest)
+            run(["git", "checkout", default_branch], cwd=dest)
+            run(["git", "pull", "origin", default_branch], cwd=dest)
     else:
-        print(f"Cloning {dest.name} ({target})...")
-        run([
-            "git", "clone", "--depth", "1", "--branch", target,
-            repo, str(dest),
-        ])
-        if ref and run(["git", "checkout", target], cwd=dest) != 0:
-            run(["git", "fetch", "--depth", "1", "origin", target], cwd=dest)
-            run(["git", "checkout", target], cwd=dest)
+        label = ref or default_branch
+        print(f"Cloning {dest.name} ({label})...")
+        run(["git", "clone", repo, str(dest)])
+        if ref:
+            if looks_like_commit(ref) or run(["git", "checkout", ref], cwd=dest) != 0:
+                run(["git", "fetch", "--depth", "1", "origin", ref], cwd=dest)
+                run(["git", "checkout", ref], cwd=dest)
+        elif default_branch:
+            run(["git", "checkout", default_branch], cwd=dest)
+
+    if not dest.exists():
+        return
 
     rev = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=dest, text=True,
@@ -75,9 +81,17 @@ def main() -> int:
         metavar="ID=REF",
         help="Checkout specific ref for an implementation (e.g. conversations=2.20.1)",
     )
+    parser.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        metavar="ID",
+        help="Download only these implementation ids (may be repeated)",
+    )
     args = parser.parse_args()
 
     ref_map = parse_refs(args.ref)
+    only_ids = {item.strip() for item in args.only} if args.only else None
 
     with open(CONFIG, encoding="utf-8") as f:
         config = yaml.safe_load(f)
@@ -85,15 +99,21 @@ def main() -> int:
     VENDOR.mkdir(exist_ok=True)
 
     for impl in config["implementations"]:
-        if args.skip_optional and impl.get("optional"):
-            print(f"Skipping optional: {impl['id']}")
+        impl_id = impl["id"]
+        if only_ids is not None and impl_id not in only_ids:
+            continue
+        if args.skip_optional and impl.get("optional") and impl_id not in ref_map:
+            print(f"Skipping optional: {impl_id}")
             continue
 
-        dest = VENDOR / impl["id"]
+        dest = VENDOR / impl.get("dir", impl_id)
         branch = impl.get("branch", "main")
-        ref = ref_map.get(impl["id"])
+        ref = ref_map.get(impl_id)
         clone_or_update(impl["repo"], dest, branch, ref)
-        print(f"  OK: {impl['id']}")
+        if not dest.exists():
+            print(f"  FAILED: {impl_id} (clone/update did not produce {dest})", file=sys.stderr)
+            return 1
+        print(f"  OK: {impl_id}")
 
     print(f"\nVendor tree ready under {VENDOR}")
     return 0

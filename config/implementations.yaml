@@ -39,7 +39,7 @@ implementations:
   - id: gajim
     description: Gajim desktop client — omemo_dr stack
     repo: https://dev.gajim.org/gajim/gajim.git
-    branch: main
+    branch: master
     type: client
     namespace: eu.siacs.conversations.axolotl
     wire_runner: gajim_omemo_dr
@@ -47,7 +47,7 @@ implementations:
   - id: dino
     description: Dino GTK client
     repo: https://github.com/dino/dino.git
-    branch: main
+    branch: master
     type: client
     namespace: eu.siacs.conversations.axolotl
     wire_runner: dino_native
@@ -72,6 +72,7 @@ implementations:
     description: Tigase MartinOMEMO SPM module (Siskin crypto stack) — audit pin
     repo: https://github.com/tigase/MartinOMEMO.git
     branch: devel
+    dir: MartinOMEMO
     type: library
     optional: true
 
