@@ -17,8 +17,8 @@ public final class SiskinNativeWireClient {
     private var chatManager: DefaultChatManager?
     private var storage: WireOMEMOStorage?
     private var messageCancellable: AnyCancellable?
+    private let bodyQueue = DispatchQueue(label: "siskin-native-wire.body")
     private var lastBody: String?
-    private let bodyLock = NSLock()
 
     public init(jid: BareJID, password: String, host: String, port: Int, dataDir: URL) {
         self.jid = jid
@@ -72,6 +72,7 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(DiscoveryModule(identity: DiscoveryModule.Identity(category: "client", type: "pc", name: "siskin-native-wire")))
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
         _ = client.modulesManager.register(PresenceModule())
+        _ = client.modulesManager.register(RosterModule())
         _ = client.modulesManager.register(PubSubModule())
         _ = client.modulesManager.register(messages)
         _ = client.modulesManager.register(omemo)
@@ -98,8 +99,14 @@ public final class SiskinNativeWireClient {
         try client.login()
         try await waitUntilConnected(timeout: 60)
         try await waitUntilOmemoReady(timeout: 90)
+        try await client.module(.presence).sendPresence()
         if let remotePeer {
             chatManager.createChat(for: client.context, with: remotePeer)
+            if let roster = client.moduleOrNil(.roster) as? RosterModule {
+                let peerJid = JID(remotePeer)
+                try? await roster.addItem(jid: peerJid, name: remotePeer.localPart, groups: [])
+            }
+            fputs("ready peer=\(remotePeer)\n", stderr)
         }
         try await Task.sleep(nanoseconds: 2_000_000_000)
     }
@@ -112,9 +119,7 @@ public final class SiskinNativeWireClient {
             switch result {
             case .message(let decrypted):
                 if let body = decrypted.message.body {
-                    bodyLock.lock()
-                    lastBody = body
-                    bodyLock.unlock()
+                    noteBody(body)
                 }
             case .transportKey:
                 break
@@ -137,16 +142,18 @@ public final class SiskinNativeWireClient {
     public func awaitBody(_ expected: String, timeoutSeconds: Int) async -> Bool {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
         while Date() < deadline {
-            bodyLock.lock()
-            let got = lastBody
-            bodyLock.unlock()
-            if got == expected { return true }
+            if currentBody() == expected { return true }
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
-        bodyLock.lock()
-        let got = lastBody
-        bodyLock.unlock()
-        return got == expected
+        return currentBody() == expected
+    }
+
+    private func noteBody(_ body: String) {
+        bodyQueue.sync { lastBody = body }
+    }
+
+    private func currentBody() -> String? {
+        bodyQueue.sync { lastBody }
     }
 
     public func disconnect() async {

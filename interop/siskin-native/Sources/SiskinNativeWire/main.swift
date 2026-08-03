@@ -65,7 +65,9 @@ struct SiskinNativeWireMain {
 
             let client = SiskinNativeWireClient(jid: bare, password: password, host: host, port: port, dataDir: dataDir)
             print("IMPLEMENTATION=siskin_im")
+            fputs("IMPLEMENTATION=siskin_im\n", stderr)
             print("VENDOR_REV=\(client.vendorRevision())")
+            fputs("VENDOR_REV=\(client.vendorRevision())\n", stderr)
             print("NAMESPACE=eu.siacs.conversations.axolotl")
             print("RUNNER=siskin_native_martinomemo")
 

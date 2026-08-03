@@ -127,7 +127,7 @@ def wait_boot(
         time.sleep(35)
     elif use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         if client_id in ("siskin_im", "monal"):
-            # MartinOMEMO / MLOMEMO: XMPP login + PEP bundle fetch can exceed 60s on CI.
+            print(f"wait_boot: native {client_id} sleeping 120s", flush=True)
             time.sleep(120)
         else:
             time.sleep(20)

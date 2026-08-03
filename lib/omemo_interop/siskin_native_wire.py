@@ -98,5 +98,5 @@ def popen_siskin_native_wire(
     env["OMEMO_INTEROP_ROOT"] = str(ROOT)
     log_path = data_dir / "wire-popen.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_file = open(log_path, "w")
+    log_file = open(log_path, "w", buffering=1)
     return subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=log_file, stderr=subprocess.STDOUT)
