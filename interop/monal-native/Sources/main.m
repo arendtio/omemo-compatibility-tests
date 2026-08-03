@@ -83,6 +83,21 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        if ([mode isEqualToString:@"wait"]) {
+            if (!peer) {
+                fprintf(stderr, "wait requires --peer (sender JID)\n");
+                return 1;
+            }
+            if (![client preparePeer:peer error:&err]) {
+                fprintf(stderr, "ERROR: preparePeer failed: %s\n", err.localizedDescription.UTF8String);
+                return 1;
+            }
+        }
+
+        NSString* readyPath = [dataDir.path stringByAppendingPathComponent:@"wire-ready"];
+        [@"ok" writeToFile:readyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        printf("READY\n");
+
         if ([mode isEqualToString:@"send"]) {
             if (!peer || !sendBody) {
                 fprintf(stderr, "send requires --peer and --send\n");
@@ -103,7 +118,7 @@ int main(int argc, char* argv[]) {
                 fprintf(stderr, "wait requires --expect\n");
                 return 1;
             }
-            BOOL ok = [client awaitBody:expectBody timeout:60];
+            BOOL ok = [client awaitBody:expectBody timeout:120];
             [client disconnect];
             if (ok) {
                 printf("OK\n");
