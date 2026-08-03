@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 import Martin
 import MartinOMEMO
@@ -16,7 +15,7 @@ public final class SiskinNativeWireClient {
     private var messageModule: MessageModule?
     private var chatManager: DefaultChatManager?
     private var storage: WireOMEMOStorage?
-    private var messageCancellable: AnyCancellable?
+    private var wireIncomingModule: WireIncomingMessageModule?
     private let bodyQueue = DispatchQueue(label: "siskin-native-wire.body")
     private var lastBody: String?
 
@@ -67,6 +66,12 @@ public final class SiskinNativeWireClient {
         let messages = MessageModule(chatManager: chatManager)
         messageModule = messages
 
+        let wireIncoming = WireIncomingMessageModule()
+        wireIncoming.onMessage = { [weak self] message in
+            self?.handleIncoming(message)
+        }
+        wireIncomingModule = wireIncoming
+
         _ = client.modulesManager.register(AuthModule())
         _ = client.modulesManager.register(StreamFeaturesModule())
         _ = client.modulesManager.register(StreamManagementModule(mode: .ack))
@@ -77,6 +82,7 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
         _ = client.modulesManager.register(PresenceModule())
         _ = client.modulesManager.register(PubSubModule())
+        _ = client.modulesManager.register(wireIncoming)
         _ = client.modulesManager.register(messages)
         _ = client.modulesManager.register(omemo)
         WireLog.line("connect: modules registered")
@@ -101,17 +107,12 @@ public final class SiskinNativeWireClient {
         try await waitUntilConnected(timeout: 60)
         WireLog.line("connect: xmpp connected")
 
-        messageCancellable = messages.messagesPublisher.sink { [weak self] received in
-            self?.handleIncoming(received.message)
-        }
-
         try await waitUntilOmemoReady(timeout: 120)
         WireLog.line("connect: omemo ready")
         try await client.module(.presence).sendPresence()
         WireLog.line("connect: presence sent")
         if let remotePeer {
-            chatManager.createChat(for: client.context, with: remotePeer)
-            WireLog.line("connect: ready peer=\(remotePeer)")
+            WireLog.line("connect: wait peer=\(remotePeer)")
         }
         pumpRunLoop(seconds: 2)
         try "ok".write(to: dataDir.appendingPathComponent("wire-ready"), atomically: true, encoding: .utf8)
