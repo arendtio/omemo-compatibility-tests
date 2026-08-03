@@ -44,7 +44,7 @@ final class SiskinNativeWireClient {
     }
 
     func connect() async throws {
-        let files = WireFileOMEMOStore(accountJid: jid.stringValue, dataDir: dataDir)
+        let files = WireFileOMEMOStore(accountJid: jid.description, dataDir: dataDir)
         let wireStorage = WireOMEMOStorage(files: files)
         guard let signalContext = SignalContext(withStorage: wireStorage) else {
             throw WireError.signalContextFailed
@@ -63,13 +63,13 @@ final class SiskinNativeWireClient {
 
         _ = client.modulesManager.register(AuthModule())
         _ = client.modulesManager.register(StreamFeaturesModule())
-        _ = client.modulesManager.register(StreamManagementModule())
+        _ = client.modulesManager.register(StreamManagementModule(mode: .ack))
         _ = client.modulesManager.register(SaslModule())
         _ = client.modulesManager.register(ResourceBinderModule())
         _ = client.modulesManager.register(SessionEstablishmentModule())
         _ = client.modulesManager.register(DiscoveryModule(identity: DiscoveryModule.Identity(category: "client", type: "pc", name: "siskin-native-wire")))
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
-        _ = client.modulesManager.register(RosterModule())
+        _ = client.modulesManager.register(RosterModule(rosterManager: DefaultRosterManager(store: DefaultRosterStore())))
         _ = client.modulesManager.register(PresenceModule())
         _ = client.modulesManager.register(PubSubModule())
         _ = client.modulesManager.register(messages)

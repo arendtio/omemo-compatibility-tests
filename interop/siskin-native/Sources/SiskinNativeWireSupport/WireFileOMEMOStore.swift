@@ -208,7 +208,7 @@ final class WireIdentityKeyStore: SignalIdentityKeyStoreProtocol {
     }
 
     func setStatus(active: Bool, forIdentity: SignalAddress) -> Bool {
-        setStatus(active ? .verifiedActive : .compromised, forIdentity: forIdentity)
+        setStatus(active ? .verifiedActive : .compromisedInactive, forIdentity: forIdentity)
     }
 
     func identities(forName name: String) -> [Identity] {
