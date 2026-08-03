@@ -57,10 +57,11 @@ struct SiskinNativeWireMain {
                 }
             }
 
-            guard let jidStr, let password, let bare = BareJID(jidStr) else {
+            guard let jidStr, let password else {
                 fputs("--jid and --password required\n", stderr)
                 return 1
             }
+            let bare = BareJID(jidStr)
 
             let client = SiskinNativeWireClient(jid: bare, password: password, host: host, port: port, dataDir: dataDir)
             print("IMPLEMENTATION=siskin_im")
@@ -72,10 +73,11 @@ struct SiskinNativeWireMain {
 
             switch mode {
             case "send":
-                guard let peer, let sendBody, let peerJid = BareJID(peer) else {
+                guard let peer, let sendBody else {
                     fputs("send requires --peer --send\n", stderr)
                     return 1
                 }
+                let peerJid = BareJID(peer)
                 try await client.sendEncrypted(peer: peerJid, plaintext: sendBody)
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 await client.disconnect()
@@ -97,10 +99,11 @@ struct SiskinNativeWireMain {
                 return 1
 
             case "send-wait":
-                guard let peer, let sendBody, let expectBody, let peerJid = BareJID(peer) else {
+                guard let peer, let sendBody, let expectBody else {
                     fputs("send-wait requires --peer --send --expect\n", stderr)
                     return 1
                 }
+                let peerJid = BareJID(peer)
                 try await client.sendEncrypted(peer: peerJid, plaintext: sendBody)
                 let ok = await client.awaitBody(expectBody, timeoutSeconds: 45)
                 await client.disconnect()
