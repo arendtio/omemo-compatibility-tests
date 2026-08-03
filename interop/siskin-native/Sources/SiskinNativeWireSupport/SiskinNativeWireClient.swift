@@ -12,8 +12,6 @@ public final class SiskinNativeWireClient {
 
     private let client = XMPPClient()
     private var omemoModule: OMEMOModule?
-    private var messageModule: MessageModule?
-    private var chatManager: DefaultChatManager?
     private var storage: WireOMEMOStorage?
     private var wireIncomingModule: WireIncomingMessageModule?
     private let bodyQueue = DispatchQueue(label: "siskin-native-wire.body")
@@ -60,12 +58,6 @@ public final class SiskinNativeWireClient {
         let omemo = OMEMOModule(signalContext: signalContext, signalStorage: wireStorage)
         omemoModule = omemo
 
-        let chatStore = DefaultChatStore()
-        let chatManager = DefaultChatManager(store: chatStore)
-        self.chatManager = chatManager
-        let messages = MessageModule(chatManager: chatManager)
-        messageModule = messages
-
         let wireIncoming = WireIncomingMessageModule()
         wireIncoming.onMessage = { [weak self] message in
             self?.handleIncoming(message)
@@ -83,7 +75,6 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(PresenceModule())
         _ = client.modulesManager.register(PubSubModule())
         _ = client.modulesManager.register(wireIncoming)
-        _ = client.modulesManager.register(messages)
         _ = client.modulesManager.register(omemo)
         WireLog.line("connect: modules registered")
 
@@ -122,18 +113,21 @@ public final class SiskinNativeWireClient {
     private func handleIncoming(_ message: Message) {
         guard let omemo = omemoModule else { return }
         guard let from = message.from?.bareJid else { return }
+        WireLog.line("incoming: from=\(from)")
         do {
             let result = try omemo.decrypt(message: message, from: from)
             switch result {
             case .message(let decrypted):
                 if let body = decrypted.message.body {
+                    WireLog.line("incoming: body=\(body)")
                     noteBody(body)
                 }
             case .transportKey:
+                WireLog.line("incoming: transportKey")
                 break
             }
         } catch {
-            fputs("decrypt error: \(error)\n", stderr)
+            WireLog.line("decrypt error: \(error)")
         }
     }
 
