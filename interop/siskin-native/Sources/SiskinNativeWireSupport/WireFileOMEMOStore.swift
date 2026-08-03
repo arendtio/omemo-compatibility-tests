@@ -354,12 +354,18 @@ public final class WireOMEMOStorage: SignalStorage {
         if identityKeyStore.localRegistrationId() == 0 || identityKeyStore.keyPair() == nil {
             let regId = signalCtx.generateRegistrationId()
             files.setRegistrationId(regId)
-            let keyPair = try! SignalIdentityKeyPair.generateKeyPair(context: signalCtx)
-            if let pairData = keyPair.keyPairData {
-                files.saveIdentityKeyPair(pairData)
+            do {
+                let keyPair = try SignalIdentityKeyPair.generateKeyPair(context: signalCtx)
+                if let pairData = keyPair.keyPairData {
+                    files.saveIdentityKeyPair(pairData)
+                }
+                let addr = SignalAddress(name: files.accountJid, deviceId: Int32(bitPattern: regId))
+                identityKeyStore.save(identity: addr, key: keyPair)
+            } catch {
+                fputs("regenerateKeys failed: \(error)\n", stderr)
+                fflush(stderr)
+                return false
             }
-            let addr = SignalAddress(name: files.accountJid, deviceId: Int32(bitPattern: regId))
-            identityKeyStore.save(identity: addr, key: keyPair)
         }
         return true
     }

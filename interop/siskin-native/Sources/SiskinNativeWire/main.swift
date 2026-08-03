@@ -4,12 +4,21 @@ import MartinOMEMO
 import SiskinNativeWireSupport
 
 @main
-struct SiskinNativeWireMain {
-    static func main() async {
-        let code = await runScenario(arguments: CommandLine.arguments)
-        exit(code)
+enum SiskinNativeWireMain {
+    static func main() {
+        let done = DispatchSemaphore(value: 0)
+        var exitCode: Int32 = 1
+        Task { @MainActor in
+            exitCode = await runScenario(arguments: CommandLine.arguments)
+            done.signal()
+        }
+        while done.wait(timeout: .now() + 0.1) == .timedOut {
+            RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
+        }
+        exit(exitCode)
     }
 
+    @MainActor
     static func runScenario(arguments: [String]) async -> Int32 {
         do {
             var mode: String?
@@ -65,16 +74,13 @@ struct SiskinNativeWireMain {
 
             let client = SiskinNativeWireClient(jid: bare, password: password, host: host, port: port, dataDir: dataDir)
             let vendorRev = client.vendorRevision()
-            fputs("IMPLEMENTATION=siskin_im\n", stderr)
-            print("IMPLEMENTATION=siskin_im")
-            fputs("VENDOR_REV=\(vendorRev)\n", stderr)
-            print("VENDOR_REV=\(vendorRev)")
-            fputs("NAMESPACE=eu.siacs.conversations.axolotl\n", stderr)
-            print("NAMESPACE=eu.siacs.conversations.axolotl")
-            fputs("RUNNER=siskin_native_martinomemo\n", stderr)
-            print("RUNNER=siskin_native_martinomemo")
+            WireLog.line("IMPLEMENTATION=siskin_im")
+            WireLog.line("VENDOR_REV=\(vendorRev)")
+            WireLog.line("NAMESPACE=eu.siacs.conversations.axolotl")
+            WireLog.line("RUNNER=siskin_native_martinomemo")
 
             let remotePeer = peer.map { BareJID($0) }
+            WireLog.line("connect: invoking mode=\(mode ?? "nil") peer=\(peer ?? "nil")")
             try await client.connect(remotePeer: mode == "wait" ? remotePeer : nil)
 
             switch mode {
@@ -85,9 +91,9 @@ struct SiskinNativeWireMain {
                 }
                 let peerJid = BareJID(peer)
                 try await client.sendEncrypted(peer: peerJid, plaintext: sendBody)
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 1))
                 await client.disconnect()
-                print("OK")
+                WireLog.line("OK")
                 return 0
 
             case "wait":
@@ -95,17 +101,17 @@ struct SiskinNativeWireMain {
                     fputs("wait requires --expect\n", stderr)
                     return 1
                 }
-                guard let peer else {
+                guard peer != nil else {
                     fputs("wait requires --peer (sender JID)\n", stderr)
                     return 1
                 }
                 let ok = await client.awaitBody(expectBody, timeoutSeconds: 120)
                 await client.disconnect()
                 if ok {
-                    print("OK")
+                    WireLog.line("OK")
                     return 0
                 }
-                fputs("TIMEOUT expected=\(expectBody)\n", stderr)
+                WireLog.line("TIMEOUT expected=\(expectBody)")
                 return 1
 
             case "send-wait":
@@ -118,10 +124,10 @@ struct SiskinNativeWireMain {
                 let ok = await client.awaitBody(expectBody, timeoutSeconds: 45)
                 await client.disconnect()
                 if ok {
-                    print("OK")
+                    WireLog.line("OK")
                     return 0
                 }
-                fputs("TIMEOUT expected=\(expectBody)\n", stderr)
+                WireLog.line("TIMEOUT expected=\(expectBody)")
                 return 1
 
             default:
@@ -129,7 +135,7 @@ struct SiskinNativeWireMain {
                 return 1
             }
         } catch {
-            fputs("ERROR: \(error)\n", stderr)
+            WireLog.line("ERROR: \(error)")
             return 1
         }
     }

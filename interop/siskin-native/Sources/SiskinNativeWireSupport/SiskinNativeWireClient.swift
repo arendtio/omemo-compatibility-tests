@@ -44,13 +44,16 @@ public final class SiskinNativeWireClient {
         return rev.isEmpty ? "unknown" : rev
     }
 
+    @MainActor
     public func connect(remotePeer: BareJID? = nil) async throws {
-        print("connect: begin")
+        WireLog.line("connect: begin")
         let files = WireFileOMEMOStore(accountJid: jid.description, dataDir: dataDir)
+        WireLog.line("connect: storage files ready")
         let wireStorage = WireOMEMOStorage(files: files)
         guard let signalContext = SignalContext(withStorage: wireStorage) else {
             throw WireError.signalContextFailed
         }
+        WireLog.line("connect: signal context ready")
         wireStorage.setup(withContext: signalContext)
         wireStorage.attachContext(client)
         storage = wireStorage
@@ -76,6 +79,7 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(PubSubModule())
         _ = client.modulesManager.register(messages)
         _ = client.modulesManager.register(omemo)
+        WireLog.line("connect: modules registered")
 
         client.connectionConfiguration.userJid = jid
         client.connectionConfiguration.credentials = .password(password)
@@ -92,25 +96,26 @@ public final class SiskinNativeWireClient {
             options.connectionTimeout = 30
         }
 
+        try client.login()
+        WireLog.line("connect: logged in")
+        try await waitUntilConnected(timeout: 60)
+        WireLog.line("connect: xmpp connected")
+
         messageCancellable = messages.messagesPublisher.sink { [weak self] received in
             self?.handleIncoming(received.message)
         }
 
-        try client.login()
-        print("connect: logged in")
-        try await waitUntilConnected(timeout: 60)
-        print("connect: xmpp connected")
         try await waitUntilOmemoReady(timeout: 120)
-        print("connect: omemo ready")
+        WireLog.line("connect: omemo ready")
         try await client.module(.presence).sendPresence()
-        print("connect: presence sent")
+        WireLog.line("connect: presence sent")
         if let remotePeer {
             chatManager.createChat(for: client.context, with: remotePeer)
-            print("connect: ready peer=\(remotePeer)")
+            WireLog.line("connect: ready peer=\(remotePeer)")
         }
-        try await Task.sleep(nanoseconds: 2_000_000_000)
+        pumpRunLoop(seconds: 2)
         try "ok".write(to: dataDir.appendingPathComponent("wire-ready"), atomically: true, encoding: .utf8)
-        print("READY")
+        WireLog.line("READY")
     }
 
     private func handleIncoming(_ message: Message) {
@@ -131,6 +136,7 @@ public final class SiskinNativeWireClient {
         }
     }
 
+    @MainActor
     public func sendEncrypted(peer: BareJID, plaintext: String) async throws {
         guard let omemo = omemoModule else { throw WireError.notConnected }
         let message = Message()
@@ -141,11 +147,12 @@ public final class SiskinNativeWireClient {
         try await client.writer.write(stanza: encrypted.message)
     }
 
+    @MainActor
     public func awaitBody(_ expected: String, timeoutSeconds: Int) async -> Bool {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
         while Date() < deadline {
             if currentBody() == expected { return true }
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            pumpRunLoop(seconds: 0.5)
         }
         return currentBody() == expected
     }
@@ -158,27 +165,35 @@ public final class SiskinNativeWireClient {
         bodyQueue.sync { lastBody }
     }
 
+    @MainActor
     public func disconnect() async {
         try? await client.disconnect()
     }
 
+    @MainActor
     private func waitUntilConnected(timeout: TimeInterval) async throws {
         let start = Date()
         while Date().timeIntervalSince(start) < timeout {
             if client.isConnected { return }
-            try await Task.sleep(nanoseconds: 200_000_000)
+            pumpRunLoop(seconds: 0.2)
         }
         throw WireError.timeout("connect")
     }
 
+    @MainActor
     private func waitUntilOmemoReady(timeout: TimeInterval) async throws {
         guard let omemo = omemoModule else { return }
         let start = Date()
         while Date().timeIntervalSince(start) < timeout {
             if omemo.isReady { return }
-            try await Task.sleep(nanoseconds: 500_000_000)
+            pumpRunLoop(seconds: 0.5)
         }
         throw WireError.timeout("omemo_ready")
+    }
+
+    @MainActor
+    private func pumpRunLoop(seconds: TimeInterval) {
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: seconds))
     }
 }
 
