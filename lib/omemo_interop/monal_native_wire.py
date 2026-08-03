@@ -28,10 +28,23 @@ def monal_native_frameworks_dir() -> Path:
     return MONAL_NATIVE / "build" / "Frameworks"
 
 
+def monal_vendor_revision() -> str:
+    monal = ROOT / "vendor" / "monal"
+    if not monal.is_dir():
+        return "unknown"
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=monal, text=True,
+        ).strip()
+    except (subprocess.CalledProcessError, OSError):
+        return "unknown"
+
+
 def monal_native_env() -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("OMEMO_XMPP_SECURITY", "auto")
     env["OMEMO_INTEROP_ROOT"] = str(ROOT)
+    env.setdefault("MONAL_VENDOR_REV", monal_vendor_revision())
     frameworks = monal_native_frameworks_dir()
     if frameworks.is_dir():
         prev = env.get("DYLD_LIBRARY_PATH", "")

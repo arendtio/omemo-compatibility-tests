@@ -38,23 +38,29 @@
 }
 
 - (NSString*)vendorRevision {
+    NSString* fromEnv = [NSProcessInfo processInfo].environment[@"MONAL_VENDOR_REV"];
+    if (fromEnv.length) {
+        return fromEnv;
+    }
     NSString* root = [NSProcessInfo processInfo].environment[@"OMEMO_INTEROP_ROOT"];
     if (!root.length) {
         return @"unknown";
     }
     NSString* monal = [root stringByAppendingPathComponent:@"vendor/monal"];
-    NSTask* task = [[NSTask alloc] init];
-    task.launchPath = @"/usr/bin/git";
-    task.arguments = @[@"rev-parse", @"HEAD"];
-    task.currentDirectoryPath = monal;
-    NSPipe* pipe = [NSPipe pipe];
-    task.standardOutput = pipe;
-    [task launch];
-    [task waitUntilExit];
-    NSData* data = [[pipe fileHandleForReading] readDataToEndOfFile];
-    NSString* rev = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    rev = [rev stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    return rev.length ? rev : @"unknown";
+    NSString* headPath = [monal stringByAppendingPathComponent:@".git/HEAD"];
+    NSString* head = [NSString stringWithContentsOfFile:headPath encoding:NSUTF8StringEncoding error:nil];
+    head = [head stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (!head.length) {
+        return @"unknown";
+    }
+    if ([head hasPrefix:@"ref: "]) {
+        NSString* refRel = [head substringFromIndex:5];
+        NSString* refPath = [monal stringByAppendingPathComponent:[NSString stringWithFormat:@".git/%@", refRel]];
+        NSString* sha = [NSString stringWithContentsOfFile:refPath encoding:NSUTF8StringEncoding error:nil];
+        sha = [sha stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        return sha.length ? sha : @"unknown";
+    }
+    return head;
 }
 
 - (xmpp*)account {
