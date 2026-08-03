@@ -45,11 +45,25 @@ def monal_native_env() -> dict[str, str]:
     env.setdefault("OMEMO_XMPP_SECURITY", "auto")
     env["OMEMO_INTEROP_ROOT"] = str(ROOT)
     env.setdefault("MONAL_VENDOR_REV", monal_vendor_revision())
+    framework_paths: list[str] = []
     frameworks = monal_native_frameworks_dir()
     if frameworks.is_dir():
+        framework_paths.append(str(frameworks))
+    if platform.system() == "Darwin":
+        try:
+            sdk = subprocess.check_output(
+                ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"],
+                text=True,
+            ).strip()
+            if sdk:
+                env["DYLD_ROOT_PATH"] = sdk
+        except (subprocess.CalledProcessError, OSError):
+            pass
+    if framework_paths:
+        env["DYLD_FRAMEWORK_PATH"] = os.pathsep.join(framework_paths)
         prev = env.get("DYLD_LIBRARY_PATH", "")
         env["DYLD_LIBRARY_PATH"] = (
-            f"{frameworks}{os.pathsep}{prev}" if prev else str(frameworks)
+            os.pathsep.join(framework_paths + ([prev] if prev else []))
         )
     return env
 
