@@ -336,13 +336,13 @@ public final class WireOMEMOStorage: SignalStorage {
         )
     }
 
-    override func setup(withContext context: SignalContext) {
+    public override func setup(withContext context: SignalContext) {
         signalCtx = context
         _ = regenerateKeys(wipe: false)
         super.setup(withContext: context)
     }
 
-    override func regenerateKeys(wipe: Bool = false) -> Bool {
+    public override func regenerateKeys(wipe: Bool = false) -> Bool {
         guard let signalCtx else { return false }
         if wipe {
             try? FileManager.default.removeItem(at: files.root)
