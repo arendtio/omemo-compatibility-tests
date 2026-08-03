@@ -21,9 +21,27 @@ if [[ ! -d "$ROOT/vendor/martin" ]]; then
 fi
 
 MARTIN_OMEMO_PKG="$ROOT/vendor/MartinOMEMO/Package.swift"
-if grep -q 'github.com/tigase/Martin' "$MARTIN_OMEMO_PKG"; then
-  sed -i.bak 's|\.package(url: "https://github.com/tigase/Martin", branch: "devel")|.package(path: "../martin")|' "$MARTIN_OMEMO_PKG"
-fi
+python3 - <<'PY' "$MARTIN_OMEMO_PKG"
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace(
+    '.package(url: "https://github.com/tigase/Martin", branch: "devel")',
+    '.package(path: "../martin")',
+)
+old_deps = 'dependencies: ["Martin", "libsignal"]'
+new_deps = (
+    'dependencies: [\n'
+    '                .product(name: "Martin", package: "martin"),\n'
+    '                .product(name: "libsignal", package: "libsignal"),\n'
+    '            ]'
+)
+if old_deps in text:
+    text = text.replace(old_deps, new_deps)
+path.write_text(text)
+PY
 
 cd "$PKG"
 swift build -c release
