@@ -98,8 +98,8 @@ public final class SiskinNativeWireClient {
         try client.login()
         try await waitUntilConnected(timeout: 60)
         try await waitUntilOmemoReady(timeout: 90)
-        if let remotePeer, let context = client.context {
-            chatManager.createChat(for: context, with: remotePeer)
+        if let remotePeer {
+            chatManager.createChat(for: client.context, with: remotePeer)
         }
         try await Task.sleep(nanoseconds: 2_000_000_000)
     }
