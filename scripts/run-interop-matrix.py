@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -445,13 +446,41 @@ SCENARIO_HANDLERS["alice_sends_bob_replies"] = scenario_alice_sends_bob_replies
 SCENARIO_HANDLERS["cross_session_roundtrip"] = scenario_alice_sends_bob_replies
 
 
-def ejabberdctl_cmd() -> list[str]:
-    config = os.environ.get(
+def ejabberd_interop_env() -> dict[str, str]:
+    env = os.environ.copy()
+    config = env.get(
         "EJABBERD_INTEROP_CONFIG",
         str(ROOT / "docker" / "ejabberd" / "ejabberd.yml"),
     )
-    os.environ["EJABBERD_CONFIG_PATH"] = config
-    os.environ.setdefault("EJABBERD_NODE", "ejabberd@localhost")
+    spool = env.get("EJABBERD_INTEROP_SPOOL", "/tmp/omemo-ejabberd-spool")
+    logs = env.get("EJABBERD_INTEROP_LOGS", "/tmp/omemo-ejabberd-logs")
+    home = env.get("EJABBERD_INTEROP_HOME", "/tmp/omemo-ejabberd-home")
+    env["EJABBERD_INTEROP_CONFIG"] = config
+    env["EJABBERD_CONFIG_PATH"] = config
+    env["EJABBERD_INTEROP_SPOOL"] = spool
+    env["EJABBERD_INTEROP_LOGS"] = logs
+    env["EJABBERD_INTEROP_HOME"] = home
+    env["SPOOL_DIR"] = spool
+    env["LOGS_DIR"] = logs
+    env["HOME"] = home
+    env.setdefault("EJABBERD_NODE", "ejabberd@localhost")
+    if os.name == "posix" and os.uname().sysname == "Darwin":
+        env["PATH"] = "/opt/homebrew/sbin:/usr/local/sbin:" + env.get("PATH", "")
+    for key, value in env.items():
+        os.environ[key] = value
+    return env
+
+
+def ejabberd_listening() -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", 5222), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def ejabberdctl_cmd() -> list[str]:
+    ejabberd_interop_env()
     base = ["ejabberdctl"]
     if os.name != "posix" or os.uname().sysname == "Darwin":
         return base
@@ -461,9 +490,13 @@ def ejabberdctl_cmd() -> list[str]:
 
 
 def ensure_ejabberd() -> int:
+    env = ejabberd_interop_env()
+    if ejabberd_listening():
+        print("ejabberd already listening on 127.0.0.1:5222")
+        return 0
     start = ROOT / "scripts" / "start-ejabberd-interop.sh"
     if start.exists():
-        return subprocess.call([str(start)], cwd=ROOT)
+        return subprocess.call([str(start)], cwd=ROOT, env=env)
     return 0
 
 
@@ -472,15 +505,11 @@ def reset_localhost_users() -> None:
     wire_root = ROOT / "tmp" / "wire-data"
     if wire_root.exists():
         shutil.rmtree(wire_root)
-    config = os.environ.get(
-        "EJABBERD_INTEROP_CONFIG",
-        str(ROOT / "docker" / "ejabberd" / "ejabberd.yml"),
-    )
-    os.environ["EJABBERD_CONFIG_PATH"] = config
+    env = ejabberd_interop_env()
     ctl = ejabberdctl_cmd()
     for user, password in [("alice", "alicepass"), ("bob", "bobpass")]:
-        subprocess.call(ctl + ["unregister", user, "localhost"], cwd=ROOT)
-        subprocess.call(ctl + ["register", user, "localhost", password], cwd=ROOT)
+        subprocess.call(ctl + ["unregister", user, "localhost"], cwd=ROOT, env=env)
+        subprocess.call(ctl + ["register", user, "localhost", password], cwd=ROOT, env=env)
 
 
 def main() -> int:
