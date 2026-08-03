@@ -69,7 +69,6 @@ final class SiskinNativeWireClient {
         _ = client.modulesManager.register(SessionEstablishmentModule())
         _ = client.modulesManager.register(DiscoveryModule(identity: DiscoveryModule.Identity(category: "client", type: "pc", name: "siskin-native-wire")))
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
-        _ = client.modulesManager.register(RosterModule(rosterManager: DefaultRosterManager(store: DefaultRosterStore())))
         _ = client.modulesManager.register(PresenceModule())
         _ = client.modulesManager.register(PubSubModule())
         _ = client.modulesManager.register(messages)
