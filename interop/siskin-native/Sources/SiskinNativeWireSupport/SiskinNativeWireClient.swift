@@ -60,9 +60,7 @@ public final class SiskinNativeWireClient {
 
         let wireIncoming = WireIncomingMessageModule()
         wireIncoming.onMessage = { [weak self] message in
-            Task { @MainActor in
-                self?.handleIncoming(message)
-            }
+            self?.handleIncoming(message)
         }
         wireIncomingModule = wireIncoming
 
