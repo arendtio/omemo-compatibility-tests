@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 MONAL_NATIVE = ROOT / "interop" / "monal-native"
 BINARY = MONAL_NATIVE / "build" / "MonalWire"
+RUNNER = ROOT / "scripts" / "run-monal-wire.sh"
 
 
 def native_macos_wire_enabled() -> bool:
@@ -40,32 +41,51 @@ def monal_vendor_revision() -> str:
         return "unknown"
 
 
+def monal_wire_runner() -> Path:
+    if RUNNER.is_file():
+        return RUNNER
+    return BINARY
+
+
 def monal_native_env() -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("OMEMO_XMPP_SECURITY", "auto")
     env["OMEMO_INTEROP_ROOT"] = str(ROOT)
     env.setdefault("MONAL_VENDOR_REV", monal_vendor_revision())
-    framework_paths: list[str] = []
     frameworks = monal_native_frameworks_dir()
     if frameworks.is_dir():
-        framework_paths.append(str(frameworks))
-    if platform.system() == "Darwin":
-        try:
-            sdk = subprocess.check_output(
-                ["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"],
-                text=True,
-            ).strip()
-            if sdk:
-                env["DYLD_ROOT_PATH"] = sdk
-        except (subprocess.CalledProcessError, OSError):
-            pass
-    if framework_paths:
-        env["DYLD_FRAMEWORK_PATH"] = os.pathsep.join(framework_paths)
-        prev = env.get("DYLD_LIBRARY_PATH", "")
-        env["DYLD_LIBRARY_PATH"] = (
-            os.pathsep.join(framework_paths + ([prev] if prev else []))
+        prev = env.get("DYLD_FRAMEWORK_PATH", "")
+        env["DYLD_FRAMEWORK_PATH"] = (
+            f"{frameworks}{os.pathsep}{prev}" if prev else str(frameworks)
         )
     return env
+
+
+def _monal_cmd(
+    mode: str,
+    jid: str,
+    password: str,
+    data_dir: Path,
+    peer: str | None,
+    send: str | None,
+    expect: str | None,
+    host: str,
+    port: int,
+) -> list[str]:
+    runner = monal_wire_runner()
+    return [
+        str(runner),
+        "--mode", mode,
+        *(["--peer", peer] if peer else []),
+        *(["--send", send] if send else []),
+        *(["--expect", expect] if expect else []),
+        "--",
+        "--jid", jid,
+        "--password", password,
+        "--host", host,
+        "--port", str(port),
+        "--data-dir", str(data_dir),
+    ]
 
 
 def build_monal_native() -> int:
@@ -89,23 +109,10 @@ def run_monal_native_wire(
     port: int = 5222,
     timeout: int = 300,
 ) -> int:
-    bin_path = monal_native_binary()
-    if not bin_path.exists():
-        print(f"Monal native wire binary missing: {bin_path}", flush=True)
+    if not monal_native_binary().exists():
+        print(f"Monal native wire binary missing: {monal_native_binary()}", flush=True)
         return 2
-    cmd = [
-        str(bin_path),
-        "--mode", mode,
-        *(["--peer", peer] if peer else []),
-        *(["--send", send] if send else []),
-        *(["--expect", expect] if expect else []),
-        "--",
-        "--jid", jid,
-        "--password", password,
-        "--host", host,
-        "--port", str(port),
-        "--data-dir", str(data_dir),
-    ]
+    cmd = _monal_cmd(mode, jid, password, data_dir, peer, send, expect, host, port)
     return subprocess.call(cmd, cwd=ROOT, env=monal_native_env(), timeout=timeout)
 
 
@@ -120,20 +127,9 @@ def popen_monal_native_wire(
     host: str = "127.0.0.1",
     port: int = 5222,
 ) -> subprocess.Popen:
-    bin_path = monal_native_binary()
-    cmd = [
-        str(bin_path),
-        "--mode", mode,
-        *(["--peer", peer] if peer else []),
-        *(["--send", send] if send else []),
-        *(["--expect", expect] if expect else []),
-        "--",
-        "--jid", jid,
-        "--password", password,
-        "--host", host,
-        "--port", str(port),
-        "--data-dir", str(data_dir),
-    ]
+    if not monal_native_binary().exists():
+        raise FileNotFoundError(f"Monal native wire binary missing: {monal_native_binary()}")
+    cmd = _monal_cmd(mode, jid, password, data_dir, peer, send, expect, host, port)
     log_path = data_dir / "wire-popen.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = open(log_path, "w", buffering=1)
