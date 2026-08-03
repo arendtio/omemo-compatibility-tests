@@ -3,13 +3,13 @@ import Foundation
 import Martin
 import MartinOMEMO
 
-final class SiskinNativeWireClient {
+public final class SiskinNativeWireClient {
 
-    let jid: BareJID
-    let password: String
-    let host: String
-    let port: Int
-    let dataDir: URL
+    public let jid: BareJID
+    public let password: String
+    public let host: String
+    public let port: Int
+    public let dataDir: URL
 
     private let client = XMPPClient()
     private var omemoModule: OMEMOModule?
@@ -19,7 +19,7 @@ final class SiskinNativeWireClient {
     private var lastBody: String?
     private let bodyLock = NSLock()
 
-    init(jid: BareJID, password: String, host: String, port: Int, dataDir: URL) {
+    public init(jid: BareJID, password: String, host: String, port: Int, dataDir: URL) {
         self.jid = jid
         self.password = password
         self.host = host
@@ -27,7 +27,7 @@ final class SiskinNativeWireClient {
         self.dataDir = dataDir
     }
 
-    func vendorRevision() -> String {
+    public func vendorRevision() -> String {
         let root = ProcessInfo.processInfo.environment["OMEMO_INTEROP_ROOT"] ?? ".."
         let vendor = URL(fileURLWithPath: root).appendingPathComponent("vendor/siskin_im")
         let proc = Process()
@@ -43,7 +43,7 @@ final class SiskinNativeWireClient {
         return rev.isEmpty ? "unknown" : rev
     }
 
-    func connect() async throws {
+    public func connect() async throws {
         let files = WireFileOMEMOStore(accountJid: jid.description, dataDir: dataDir)
         let wireStorage = WireOMEMOStorage(files: files)
         guard let signalContext = SignalContext(withStorage: wireStorage) else {
@@ -119,7 +119,7 @@ final class SiskinNativeWireClient {
         }
     }
 
-    func sendEncrypted(peer: BareJID, plaintext: String) async throws {
+    public func sendEncrypted(peer: BareJID, plaintext: String) async throws {
         guard let omemo = omemoModule else { throw WireError.notConnected }
         let message = Message()
         message.type = .chat
@@ -129,7 +129,7 @@ final class SiskinNativeWireClient {
         try await client.writer.write(stanza: encrypted.message)
     }
 
-    func awaitBody(_ expected: String, timeoutSeconds: Int) async -> Bool {
+    public func awaitBody(_ expected: String, timeoutSeconds: Int) async -> Bool {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
         while Date() < deadline {
             bodyLock.lock()
@@ -144,7 +144,7 @@ final class SiskinNativeWireClient {
         return got == expected
     }
 
-    func disconnect() async {
+    public func disconnect() async {
         try? await client.disconnect()
     }
 
@@ -168,12 +168,12 @@ final class SiskinNativeWireClient {
     }
 }
 
-enum WireError: Error, CustomStringConvertible {
+public enum WireError: Error, CustomStringConvertible {
     case signalContextFailed
     case notConnected
     case timeout(String)
 
-    var description: String {
+    public var description: String {
         switch self {
         case .signalContextFailed: return "SignalContext init failed"
         case .notConnected: return "not connected"
