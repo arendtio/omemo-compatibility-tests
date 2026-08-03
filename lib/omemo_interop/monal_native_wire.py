@@ -47,6 +47,26 @@ def monal_wire_runner() -> Path:
     return BINARY
 
 
+def monal_simulator_wire() -> bool:
+    return platform.system() == "Darwin" and RUNNER.is_file()
+
+
+def monal_xmpp_host(host: str) -> str:
+    """Simulator processes cannot reach host ejabberd via 127.0.0.1."""
+    if host != "127.0.0.1" or not monal_simulator_wire():
+        return host
+    for iface in ("en0", "en1", "en2"):
+        try:
+            ip = subprocess.check_output(
+                ["ipconfig", "getifaddr", iface], text=True,
+            ).strip()
+            if ip:
+                return ip
+        except (subprocess.CalledProcessError, OSError):
+            continue
+    return host
+
+
 def monal_native_env() -> dict[str, str]:
     env = os.environ.copy()
     env.setdefault("OMEMO_XMPP_SECURITY", "auto")
@@ -73,6 +93,9 @@ def _monal_cmd(
     port: int,
 ) -> list[str]:
     runner = monal_wire_runner()
+    connect_host = monal_xmpp_host(host)
+    if connect_host != host:
+        print(f"Monal simulator wire: XMPP host {host} -> {connect_host}", flush=True)
     return [
         str(runner),
         "--mode", mode,
@@ -82,7 +105,7 @@ def _monal_cmd(
         "--",
         "--jid", jid,
         "--password", password,
-        "--host", host,
+        "--host", connect_host,
         "--port", str(port),
         "--data-dir", str(data_dir),
     ]
