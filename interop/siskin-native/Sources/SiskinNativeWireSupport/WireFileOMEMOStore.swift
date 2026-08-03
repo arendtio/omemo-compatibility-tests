@@ -190,6 +190,9 @@ final class WireIdentityKeyStore: SignalIdentityKeyStoreProtocol {
 
     func save(identity: SignalAddress, key: SignalIdentityKeyProtocol?) -> Bool {
         guard let key else { return false }
+        if let pairData = (key as? SignalIdentityKeyPairProtocol)?.keyPairData {
+            files.saveIdentityKeyPair(pairData)
+        }
         return save(identity: identity, publicKeyData: key.publicKeyData)
     }
 
