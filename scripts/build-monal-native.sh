@@ -72,6 +72,12 @@ echo "pod install (Monal)..."
 cd "$MONAL_DIR"
 pod install
 
+MONAL_XCODE_FLAGS=(
+  CODE_SIGNING_ALLOWED=NO
+  GCC_TREAT_IMPLICIT_INT_FLOAT_CONVERSION_AS_ERROR=NO
+  WARNING_CFLAGS="-Wno-implicit-int-float-conversion"
+)
+
 echo "Resolving Swift package dependencies..."
 xcodebuild \
   -workspace "$MONAL_WORKSPACE" \
@@ -80,7 +86,7 @@ xcodebuild \
   -sdk "$SDK" \
   -derivedDataPath "$DERIVED" \
   -resolvePackageDependencies \
-  CODE_SIGNING_ALLOWED=NO \
+  "${MONAL_XCODE_FLAGS[@]}" \
   -quiet
 
 echo "Building MonalWire (sdk=$SDK)..."
@@ -90,7 +96,7 @@ xcodebuild \
   -configuration Debug \
   -sdk "$SDK" \
   -derivedDataPath "$DERIVED" \
-  CODE_SIGNING_ALLOWED=NO \
+  "${MONAL_XCODE_FLAGS[@]}" \
   -quiet
 
 PRODUCTS="$DERIVED/Build/Products/Debug-${SDK}"
