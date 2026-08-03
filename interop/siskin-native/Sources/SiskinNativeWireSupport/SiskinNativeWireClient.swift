@@ -101,10 +101,6 @@ public final class SiskinNativeWireClient {
         try await client.module(.presence).sendPresence()
         if let remotePeer {
             chatManager.createChat(for: client.context, with: remotePeer)
-            if let roster = client.moduleOrNil(.roster) as? RosterModule {
-                let peerJid = JID(remotePeer)
-                try? await roster.addItem(jid: peerJid, name: remotePeer.localPart, groups: [])
-            }
             fputs("ready peer=\(remotePeer)\n", stderr)
         }
         try await Task.sleep(nanoseconds: 2_000_000_000)

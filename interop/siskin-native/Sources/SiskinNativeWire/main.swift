@@ -64,11 +64,14 @@ struct SiskinNativeWireMain {
             let bare = BareJID(jidStr)
 
             let client = SiskinNativeWireClient(jid: bare, password: password, host: host, port: port, dataDir: dataDir)
-            print("IMPLEMENTATION=siskin_im")
+            let vendorRev = client.vendorRevision()
             fputs("IMPLEMENTATION=siskin_im\n", stderr)
-            print("VENDOR_REV=\(client.vendorRevision())")
-            fputs("VENDOR_REV=\(client.vendorRevision())\n", stderr)
+            print("IMPLEMENTATION=siskin_im")
+            fputs("VENDOR_REV=\(vendorRev)\n", stderr)
+            print("VENDOR_REV=\(vendorRev)")
+            fputs("NAMESPACE=eu.siacs.conversations.axolotl\n", stderr)
             print("NAMESPACE=eu.siacs.conversations.axolotl")
+            fputs("RUNNER=siskin_native_martinomemo\n", stderr)
             print("RUNNER=siskin_native_martinomemo")
 
             let remotePeer = peer.map { BareJID($0) }

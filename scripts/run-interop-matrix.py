@@ -314,6 +314,9 @@ def scenario_bob_sends_alice_replies(
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
     wait_boot(right, pair, native_conversations, False)
+    if bob_proc.poll() is not None:
+        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
+        return bob_proc.poll() or 1
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -346,6 +349,9 @@ def scenario_unicode_body_roundtrip(
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
     wait_boot(right, pair, native_conversations, False)
+    if bob_proc.poll() is not None:
+        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
+        return bob_proc.poll() or 1
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -422,6 +428,9 @@ def scenario_alice_sends_bob_replies(
         data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
     )
     wait_boot(right, pair, native_conversations, False)
+    if bob_proc.poll() is not None:
+        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
+        return bob_proc.poll() or 1
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
