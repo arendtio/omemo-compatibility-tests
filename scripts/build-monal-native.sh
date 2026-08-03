@@ -103,21 +103,20 @@ xcodebuild \
   -quiet
 
 PRODUCTS="$DERIVED/Build/Products/Debug-${SDK}"
-WIRE_BIN="$PRODUCTS/MonalWire.app/MonalWire"
-if [[ ! -f "$WIRE_BIN" ]]; then
-  WIRE_BIN="$PRODUCTS/MonalWire"
-fi
-if [[ ! -f "$WIRE_BIN" ]]; then
-  echo "MonalWire binary missing under $PRODUCTS" >&2
+WIRE_APP="$PRODUCTS/MonalWire.app"
+if [[ ! -d "$WIRE_APP" ]]; then
+  echo "MonalWire.app missing under $PRODUCTS" >&2
   exit 1
 fi
 
+rm -rf "$OUT/MonalWire.app"
+cp -R "$WIRE_APP" "$OUT/"
+chmod +x "$OUT/MonalWire.app/MonalWire"
+
+# Legacy flat path + staged frameworks (used if app Frameworks dir is empty).
 mkdir -p "$OUT/Frameworks"
-cp -f "$WIRE_BIN" "$OUT/MonalWire"
-chmod +x "$OUT/MonalWire"
-
-# Stage simulator frameworks for DYLD_LIBRARY_PATH at runtime.
 find "$PRODUCTS" -maxdepth 1 -name '*.framework' -exec cp -R {} "$OUT/Frameworks/" \;
+ln -sf MonalWire.app/MonalWire "$OUT/MonalWire"
 
-echo "Built: $OUT/MonalWire"
-echo "Frameworks: $OUT/Frameworks"
+echo "Built: $OUT/MonalWire.app"
+echo "Binary: $OUT/MonalWire.app/MonalWire"

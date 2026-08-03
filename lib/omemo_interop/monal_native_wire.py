@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 MONAL_NATIVE = ROOT / "interop" / "monal-native"
-BINARY = MONAL_NATIVE / "build" / "MonalWire"
+BINARY = MONAL_NATIVE / "build" / "MonalWire.app" / "MonalWire"
+BINARY_FALLBACK = MONAL_NATIVE / "build" / "MonalWire"
 RUNNER = ROOT / "scripts" / "run-monal-wire.sh"
 
 
@@ -22,10 +23,15 @@ def native_macos_wire_enabled() -> bool:
 
 
 def monal_native_binary() -> Path:
-    return BINARY
+    if BINARY.is_file():
+        return BINARY
+    return BINARY_FALLBACK
 
 
 def monal_native_frameworks_dir() -> Path:
+    app_fw = MONAL_NATIVE / "build" / "MonalWire.app" / "Frameworks"
+    if app_fw.is_dir():
+        return app_fw
     return MONAL_NATIVE / "build" / "Frameworks"
 
 

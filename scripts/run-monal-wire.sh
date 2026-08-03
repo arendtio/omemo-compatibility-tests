@@ -2,10 +2,15 @@
 # Run MonalWire (iphonesimulator build) inside a booted iOS Simulator.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="$ROOT/interop/monal-native/build/MonalWire"
-FRAMEWORKS="$ROOT/interop/monal-native/build/Frameworks"
+APP="$ROOT/interop/monal-native/build/MonalWire.app"
+BIN="$APP/MonalWire"
+FRAMEWORKS="$APP/Frameworks"
+if [[ ! -f "$BIN" ]]; then
+  BIN="$ROOT/interop/monal-native/build/MonalWire"
+  FRAMEWORKS="$ROOT/interop/monal-native/build/Frameworks"
+fi
 
-if [[ ! -x "$BIN" ]]; then
+if [[ ! -f "$BIN" ]]; then
   echo "MonalWire missing: $BIN" >&2
   exit 2
 fi
@@ -27,7 +32,7 @@ for runtime in sorted(data.get('devices', {}).keys(), reverse=True):
             sys.exit(0)
 sys.exit(1)
 ")"
-  echo "Booting simulator $udid"
+  echo "Booting simulator $udid" >&2
   xcrun simctl boot "$udid" 2>/dev/null || true
   for _ in $(seq 1 30); do
     if xcrun simctl list devices booted 2>/dev/null | grep -q Booted; then
@@ -43,13 +48,15 @@ boot_simulator
 
 export OMEMO_INTEROP_ROOT="${OMEMO_INTEROP_ROOT:-$ROOT}"
 export OMEMO_XMPP_SECURITY="${OMEMO_XMPP_SECURITY:-auto}"
-export DYLD_FRAMEWORK_PATH="${FRAMEWORKS}${DYLD_FRAMEWORK_PATH:+:$DYLD_FRAMEWORK_PATH}"
 
-echo "MonalWire: spawning in iOS Simulator" >&2
+# simctl spawn has no /usr/bin/env in the simulator; SIMCTL_CHILD_* passes env to child.
+export SIMCTL_CHILD_OOMEMO_INTEROP_ROOT="$OMEMO_INTEROP_ROOT"
+export SIMCTL_CHILD_OOMEMO_XMPP_SECURITY="$OMEMO_XMPP_SECURITY"
+export SIMCTL_CHILD_MONAL_VENDOR_REV="${MONAL_VENDOR_REV:-}"
+if [[ -d "$FRAMEWORKS" ]]; then
+  export SIMCTL_CHILD_DYLD_FRAMEWORK_PATH="$FRAMEWORKS${DYLD_FRAMEWORK_PATH:+:$DYLD_FRAMEWORK_PATH}"
+fi
 
-exec xcrun simctl spawn booted env \
-  OMEMO_INTEROP_ROOT="$OMEMO_INTEROP_ROOT" \
-  OMEMO_XMPP_SECURITY="$OMEMO_XMPP_SECURITY" \
-  MONAL_VENDOR_REV="${MONAL_VENDOR_REV:-}" \
-  DYLD_FRAMEWORK_PATH="$DYLD_FRAMEWORK_PATH" \
-  "$BIN" "$@"
+echo "MonalWire: spawning $BIN in iOS Simulator" >&2
+
+exec xcrun simctl spawn booted "$BIN" "$@"
