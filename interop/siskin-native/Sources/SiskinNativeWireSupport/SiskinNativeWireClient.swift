@@ -45,6 +45,7 @@ public final class SiskinNativeWireClient {
     }
 
     public func connect(remotePeer: BareJID? = nil) async throws {
+        print("connect: begin", flush: true)
         let files = WireFileOMEMOStore(accountJid: jid.description, dataDir: dataDir)
         let wireStorage = WireOMEMOStorage(files: files)
         guard let signalContext = SignalContext(withStorage: wireStorage) else {
@@ -96,14 +97,20 @@ public final class SiskinNativeWireClient {
         }
 
         try client.login()
+        print("connect: logged in", flush: true)
         try await waitUntilConnected(timeout: 60)
-        try await waitUntilOmemoReady(timeout: 90)
+        print("connect: xmpp connected", flush: true)
+        try await waitUntilOmemoReady(timeout: 120)
+        print("connect: omemo ready", flush: true)
         try await client.module(.presence).sendPresence()
+        print("connect: presence sent", flush: true)
         if let remotePeer {
             chatManager.createChat(for: client.context, with: remotePeer)
-            fputs("ready peer=\(remotePeer)\n", stderr)
+            print("connect: ready peer=\(remotePeer)", flush: true)
         }
         try await Task.sleep(nanoseconds: 2_000_000_000)
+        try "ok".write(to: dataDir.appendingPathComponent("wire-ready"), atomically: true, encoding: .utf8)
+        print("READY", flush: true)
     }
 
     private func handleIncoming(_ message: Message) {

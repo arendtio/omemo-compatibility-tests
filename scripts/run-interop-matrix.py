@@ -126,16 +126,72 @@ def wait_boot(
     elif client_id == "conversations" and use_native_wire(client_id, pair, as_matrix_left, native_conversations):
         time.sleep(35)
     elif use_native_wire(client_id, pair, as_matrix_left, native_conversations):
-        if client_id in ("siskin_im", "monal"):
-            print(f"wait_boot: native {client_id} sleeping 120s", flush=True)
-            time.sleep(120)
-        else:
-            time.sleep(20)
+        # wait_native_wire_process replaces fixed sleep for spawned receivers.
+        time.sleep(5)
     else:
         time.sleep(12)
 
 
 NATIVE_WIRE_WAIT_TIMEOUT = 180
+
+
+def wait_after_spawn_wait(
+    client_id: str,
+    matrix: dict,
+    pair: dict,
+    mode: str,
+    native_conversations: bool,
+    as_matrix_left: bool,
+    proc: subprocess.Popen,
+    data_dir: Path,
+) -> int | None:
+    """Boot a spawned wire client; return exit code on early failure."""
+    if mode != "wait":
+        wait_boot(client_id, pair, native_conversations, as_matrix_left)
+        return None
+    if (
+        client_id in ("siskin_im", "monal")
+        and use_native_wire(client_id, pair, as_matrix_left, native_conversations)
+    ):
+        early = wait_native_wire_process(client_id, proc, data_dir)
+        if early is not None:
+            dump_wire_log(data_dir)
+            return early
+        if not (data_dir / "wire-ready").is_file():
+            dump_wire_log(data_dir)
+            return 1
+    else:
+        wait_boot(client_id, pair, native_conversations, as_matrix_left)
+    if proc.poll() is not None:
+        dump_wire_log(data_dir)
+        return proc.poll() or 1
+    return None
+
+
+def wait_native_wire_process(
+    client_id: str,
+    proc: subprocess.Popen,
+    data_dir: Path,
+    timeout: int = NATIVE_WIRE_WAIT_TIMEOUT,
+) -> int | None:
+    """Wait until wire-ready marker or child exit. Returns exit code if child died."""
+    ready = data_dir / "wire-ready"
+    if ready.exists():
+        ready.unlink()
+    for elapsed in range(timeout):
+        rc = proc.poll()
+        if rc is not None:
+            print(f"wait_native: {client_id} exited early with {rc} after {elapsed}s", flush=True)
+            return rc
+        if ready.is_file():
+            print(f"wait_native: {client_id} ready after {elapsed}s", flush=True)
+            return None
+        time.sleep(1)
+    rc = proc.poll()
+    if rc is not None:
+        return rc
+    print(f"wait_native: {client_id} not ready after {timeout}s", flush=True)
+    return None
 
 
 def dump_wire_log(data_dir: Path) -> None:
@@ -281,13 +337,18 @@ def scenario_bob_sends_alice_replies(
     bob_jid = "bob@localhost"
     tag = f"{right}-to-{left}"
 
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         expect=f"hello-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
+        data_dir=alice_data,
     )
-    wait_boot(left, pair, native_conversations, True)
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "wait", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
+        return rc
 
     rc = invoke_client(
         right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
@@ -307,16 +368,18 @@ def scenario_bob_sends_alice_replies(
     if alice_rc != 0:
         return alice_rc
 
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         expect=f"reply-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+        data_dir=bob_data,
     )
-    wait_boot(right, pair, native_conversations, False)
-    if bob_proc.poll() is not None:
-        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
-        return bob_proc.poll() or 1
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -342,16 +405,18 @@ def scenario_unicode_body_roundtrip(
     hello = f"hello-unicode-🧪-{tag}"
     reply = f"reply-unicode-🧪-{tag}"
 
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         expect=hello,
-        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+        data_dir=bob_data,
     )
-    wait_boot(right, pair, native_conversations, False)
-    if bob_proc.poll() is not None:
-        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
-        return bob_proc.poll() or 1
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -370,13 +435,18 @@ def scenario_unicode_body_roundtrip(
         dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
         return bob_rc
 
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         expect=reply,
-        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
+        data_dir=alice_data,
     )
-    wait_boot(left, pair, native_conversations, True)
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "wait", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
+        return rc
     rc = invoke_client(
         right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
@@ -421,16 +491,18 @@ def scenario_alice_sends_bob_replies(
     bob_jid = "bob@localhost"
     tag = f"{left}-to-{right}"
 
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         expect=f"hello-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+        data_dir=bob_data,
     )
-    wait_boot(right, pair, native_conversations, False)
-    if bob_proc.poll() is not None:
-        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
-        return bob_proc.poll() or 1
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -450,13 +522,18 @@ def scenario_alice_sends_bob_replies(
         dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
         return bob_rc
 
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
         expect=f"reply-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
+        data_dir=alice_data,
     )
-    wait_boot(left, pair, native_conversations, True)
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "wait", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
+        return rc
     rc = invoke_client(
         right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
