@@ -57,10 +57,10 @@ ensure_rust_nightly() {
 echo "Installing MonalWire target into vendor Monal project..."
 ruby "$ROOT/interop/monal-native/scripts/install-monal-wire-target.rb"
 
-if [[ -x "$RUST_DIR/build-rust.sh" ]]; then
+if [[ -f "$RUST_DIR/build-rust.sh" ]]; then
   echo "Building Monal rust bridge (LibMonalRustSwiftBridge)..."
   ensure_rust_nightly
-  (cd "$RUST_DIR" && ./build-rust.sh)
+  (cd "$RUST_DIR" && bash ./build-rust.sh)
 fi
 
 if [[ ! -d "$RUST_PKG" ]]; then
