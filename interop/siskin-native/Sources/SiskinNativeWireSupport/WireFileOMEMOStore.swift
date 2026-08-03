@@ -355,6 +355,9 @@ public final class WireOMEMOStorage: SignalStorage {
             let regId = signalCtx.generateRegistrationId()
             files.setRegistrationId(regId)
             let keyPair = try! SignalIdentityKeyPair.generateKeyPair(context: signalCtx)
+            if let pairData = keyPair.keyPairData {
+                files.saveIdentityKeyPair(pairData)
+            }
             let addr = SignalAddress(name: files.accountJid, deviceId: Int32(bitPattern: regId))
             identityKeyStore.save(identity: addr, key: keyPair)
         }

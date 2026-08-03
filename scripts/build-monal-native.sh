@@ -7,6 +7,8 @@ OUT="$ROOT/interop/monal-native/build"
 MONAL_DIR="$ROOT/vendor/monal/Monal"
 MONAL_XCODE="$MONAL_DIR/Monal.xcodeproj"
 MONAL_WORKSPACE="$MONAL_DIR/Monal.xcworkspace"
+RUST_DIR="$ROOT/vendor/monal/rust"
+RUST_PKG="$RUST_DIR/LibMonalRustSwiftBridge"
 DERIVED="$OUT/DerivedData"
 SDK=iphonesimulator
 
@@ -37,17 +39,49 @@ if ! ruby -e 'require "xcodeproj"' 2>/dev/null; then
   gem install xcodeproj --no-document
 fi
 
+ensure_rust_nightly() {
+  if [[ -f "$HOME/.cargo/env" ]]; then
+    # shellcheck disable=SC1091
+    source "$HOME/.cargo/env"
+  fi
+  if ! command -v rustc >/dev/null; then
+    echo "Installing Rust nightly..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly
+    # shellcheck disable=SC1091
+    source "$HOME/.cargo/env"
+  fi
+  rustup toolchain install nightly 2>/dev/null || true
+  rustup +nightly --version >/dev/null 2>&1 || rustup default nightly
+}
+
 echo "Installing MonalWire target into vendor Monal project..."
 ruby "$ROOT/interop/monal-native/scripts/install-monal-wire-target.rb"
 
+if [[ -x "$RUST_DIR/build-rust.sh" ]]; then
+  echo "Building Monal rust bridge (LibMonalRustSwiftBridge)..."
+  ensure_rust_nightly
+  (cd "$RUST_DIR" && ./build-rust.sh)
+fi
+
+if [[ ! -d "$RUST_PKG" ]]; then
+  echo "LibMonalRustSwiftBridge missing at $RUST_PKG — rust build required" >&2
+  exit 1
+fi
+
 echo "pod install (Monal)..."
 cd "$MONAL_DIR"
-pod install --repo-update
+pod install
 
-if [[ -x "$ROOT/vendor/monal/rust/build-rust.sh" ]]; then
-  echo "Building Monal rust bridge..."
-  (cd "$ROOT/vendor/monal/rust" && ./build-rust.sh)
-fi
+echo "Resolving Swift package dependencies..."
+xcodebuild \
+  -workspace "$MONAL_WORKSPACE" \
+  -scheme monalxmpp \
+  -configuration Debug \
+  -sdk "$SDK" \
+  -derivedDataPath "$DERIVED" \
+  -resolvePackageDependencies \
+  CODE_SIGNING_ALLOWED=NO \
+  -quiet
 
 echo "Building MonalWire (sdk=$SDK)..."
 xcodebuild \
