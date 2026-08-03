@@ -14,6 +14,19 @@ unless File.directory?(monal_dir)
   exit 1
 end
 
+def normalize_monal_wire_target(target)
+  target.build_configurations.each do |config|
+    config.build_settings["SWIFT_VERSION"] = "5.0"
+    config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "14.0"
+    config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+    config.build_settings["GCC_PREFIX_HEADER"] = "MonalSourceCodePrefix.pch"
+    config.build_settings["GCC_PRECOMPILE_PREFIX_HEADER"] = "YES"
+    config.build_settings["HEADER_SEARCH_PATHS"] = "$(inherited) $(SRCROOT)/Classes $(SRCROOT)/monalxmpp"
+    config.build_settings.delete("SWIFT_VERSION[sdk=iphoneos*]")
+    config.build_settings.delete("SWIFT_VERSION[sdk=iphonesimulator*]")
+  end
+end
+
 project = Xcodeproj::Project.open(project_path)
 existing = project.targets.find { |t| t.name == "MonalWire" }
 
@@ -37,19 +50,15 @@ unless existing
   sworim_ref = project.files.find { |f| f.path == "sworim.sqlite" }
   target.resources_build_phase.add_file_reference(sworim_ref) if sworim_ref
 
-  target.build_configurations.each do |config|
-    config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "14.0"
-    config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
-    config.build_settings["GCC_PREFIX_HEADER"] = "MonalSourceCodePrefix.pch"
-    config.build_settings["GCC_PRECOMPILE_PREFIX_HEADER"] = "YES"
-    config.build_settings["HEADER_SEARCH_PATHS"] = "$(inherited) $(SRCROOT)/Classes $(SRCROOT)/monalxmpp"
-  end
+  normalize_monal_wire_target(target)
 
   project.save
   existing = target
   puts "Added MonalWire target to Monal.xcodeproj"
 else
   puts "MonalWire target already present"
+  normalize_monal_wire_target(existing)
+  project.save
 end
 
 scheme_dir = File.join(project_path, "xcshareddata/xcschemes")
