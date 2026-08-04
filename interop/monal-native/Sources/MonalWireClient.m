@@ -20,6 +20,7 @@
 @property(nonatomic, strong) NSNumber* accountID;
 @property(nonatomic, copy) NSString* lastBody;
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
+@property(nonatomic, assign) BOOL sasl2RestartTriggered;
 @end
 
 @implementation MonalWireClient
@@ -151,8 +152,17 @@
     }
 }
 
+- (void)triggerSasl2StreamRestartIfNeeded:(xmpp*)acc {
+    if (!acc || acc.accountState != kStateLoggedIn || self.sasl2RestartTriggered) {
+        return;
+    }
+    self.sasl2RestartTriggered = YES;
+    MonalWireRestartStreamAfterSasl2Login(acc);
+}
+
 - (BOOL)waitForSessionWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     self.smacksFallbackScheduled = NO;
+    self.sasl2RestartTriggered = NO;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     xmpp* acc = nil;
     int lastLoggedState = -100;
@@ -169,6 +179,7 @@
             }
             lastLoggedState = state;
         }
+        [self triggerSasl2StreamRestartIfNeeded:acc];
         [self triggerSmacksFallbackIfNeeded:acc];
         if (acc && acc.accountState >= kStateInitStarted) {
             MonalWireLog("connect: init started");

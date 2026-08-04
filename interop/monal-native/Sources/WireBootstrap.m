@@ -7,8 +7,7 @@
 #import <monalxmpp/MLConstants.h>
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
-
-static NSURL* wireDataDir = nil;
+static NSMutableSet<NSNumber*>* wireSasl2RestartedAccounts = nil;
 static NSMutableDictionary<NSString*, NSString*>* wireKeychainPasswords = nil;
 
 static NSString* wireKeychainKey(NSString* service, NSString* account) {
@@ -113,31 +112,25 @@ typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL 
 static WireProcessInputIMP wireOrigProcessInput = NULL;
 
 static void wireMaybeRestartStreamAfterSasl2(xmpp* account, id parsedStanza) {
+    (void)parsedStanza;
+    MonalWireRestartStreamAfterSasl2Login(account);
+}
+
+void MonalWireRestartStreamAfterSasl2Login(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
     }
-    SEL checkSel = NSSelectorFromString(@"check:");
-    if (![parsedStanza respondsToSelector:checkSel]) {
-        return;
-    }
-    BOOL isSasl2Success = ((BOOL (*)(id, SEL, NSString*))objc_msgSend)(
-        parsedStanza, checkSel, @"/{urn:xmpp:sasl:2}success");
-    if (!isSasl2Success) {
-        return;
-    }
-
-    static NSMutableSet<NSNumber*>* restartedAccounts = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        restartedAccounts = [NSMutableSet new];
+        wireSasl2RestartedAccounts = [NSMutableSet new];
     });
     NSNumber* accountID = account.accountID;
-    if (!accountID || [restartedAccounts containsObject:accountID]) {
+    if (!accountID || [wireSasl2RestartedAccounts containsObject:accountID]) {
         return;
     }
-    [restartedAccounts addObject:accountID];
+    [wireSasl2RestartedAccounts addObject:accountID];
 
-    fprintf(stderr, "MonalWire: SASL2 success without session init — restarting stream for bind\n");
+    fprintf(stderr, "MonalWire: SASL2 logged in without session — restarting stream for bind\n");
     fflush(stderr);
 
     SEL prepareParser = NSSelectorFromString(@"prepareXMPPParser");
