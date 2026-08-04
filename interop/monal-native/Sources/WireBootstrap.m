@@ -4,6 +4,10 @@
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
 #import <monalxmpp/xmpp.h>
+#import <Network/Network.h>
+
+@interface MLStream : NSObject
+@end
 
 static NSURL* wireDataDir = nil;
 static NSMutableDictionary<NSString*, NSString*>* wireKeychainPasswords = nil;
