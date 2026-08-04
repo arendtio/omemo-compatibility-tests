@@ -122,7 +122,8 @@
         if (attempt > 1) {
             MonalWireLog("connect: retry after failure");
             [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:NO];
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.0]];
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:5.0]];
+            MonalWireEnsurePlaintextHooks();
             [[MLXMPPManager sharedInstance] addNewAccountToKeychainAndConnectWithPassword:self.password andAccountID:self.accountID];
         }
         if ([self waitForSessionWithTimeout:timeout error:error]) {
@@ -178,6 +179,9 @@
                 MonalWireLog("connect: logged out");
             }
             lastLoggedState = state;
+        }
+        if (acc && acc.accountState < kStateHasStream) {
+            MonalWireForcePlaintextStreamReady(acc);
         }
         [self triggerSasl2StreamRestartIfNeeded:acc];
         [self triggerSmacksFallbackIfNeeded:acc];

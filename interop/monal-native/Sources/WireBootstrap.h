@@ -12,4 +12,7 @@ void MonalWireEnsurePlaintextHooks(void);
 /// SASL2 on ejabberd may leave the account at kStateLoggedIn without bind; restart stream for legacy bind.
 void MonalWireRestartStreamAfterSasl2Login(xmpp* account);
 
+/// Keep plaintext stream features on the secure processing path (ejabberd has no STARTTLS).
+void MonalWireForcePlaintextStreamReady(xmpp* account);
+
 NS_ASSUME_NONNULL_END

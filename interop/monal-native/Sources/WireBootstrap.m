@@ -117,6 +117,13 @@ static void wireMaybeRestartStreamAfterSasl2(xmpp* account, id parsedStanza) {
     MonalWireRestartStreamAfterSasl2Login(account);
 }
 
+void MonalWireForcePlaintextStreamReady(xmpp* account) {
+    if (!account || account.connectionProperties.server.isDirectTLS) {
+        return;
+    }
+    wireSetStartTLSComplete(account, YES);
+}
+
 void MonalWireRestartStreamAfterSasl2Login(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
