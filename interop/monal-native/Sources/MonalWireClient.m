@@ -7,6 +7,7 @@
 #import <monalxmpp/MLContact.h>
 #import <monalxmpp/MLMessage.h>
 #import <monalxmpp/MLConstants.h>
+#import <monalxmpp/MLOMEMO.h>
 #import <monalxmpp/xmpp.h>
 
 @interface MonalWireClient ()
@@ -170,12 +171,26 @@
     }
     MLContact* contact = [MLContact createContactFromJid:peerJid andAccountID:self.accountID];
     [[MLXMPPManager sharedInstance] addContact:contact];
-    NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:45];
+    if (acc.omemo) {
+        [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:peerJid];
+    }
+    NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:60];
     while ([deadline timeIntervalSinceNow] > 0) {
         if (acc.accountState >= kStateCatchupDone) {
             break;
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+    }
+    deadline = [NSDate dateWithTimeIntervalSinceNow:45];
+    while ([deadline timeIntervalSinceNow] > 0) {
+        if (!acc.omemo || acc.omemo.openBundleFetchCnt == 0) {
+            break;
+        }
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+    }
+    if (acc.omemo && acc.omemo.openBundleFetchCnt > 0) {
+        MonalWireLog([[NSString stringWithFormat:@"preparePeer: bundle fetches still open (%lu)",
+                       acc.omemo.openBundleFetchCnt] UTF8String]);
     }
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.0]];
     return YES;
