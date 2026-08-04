@@ -283,8 +283,6 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     fflush(stderr);
     NSString* resource = [account.connectionProperties.identity.resource copy];
     MonalWireDispatchOnReceiveQueue(account, ^{
-        [account setValue:@NO forKey:@"resuming"];
-        [account setValue:nil forKey:@"streamID"];
         [account bindResource:resource];
     });
 }
