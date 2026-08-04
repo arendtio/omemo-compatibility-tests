@@ -32,6 +32,11 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
         method_exchangeImplementations(orig, repl);
     }
 
+    // Headless wire: skip device-id migration that reads keychain (Rust panic in simulator CLI).
+    [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];
+    [[HelperTools defaultsDB] setBool:NO forKey:@"udpLoggerEnabled"];
+    [[HelperTools defaultsDB] synchronize];
+
     NSString* dbPath = [[dataDir URLByAppendingPathComponent:@"sworim.sqlite"] path];
     if (![[NSFileManager defaultManager] fileExistsAtPath:dbPath]) {
         NSString* templatePath = [[NSBundle mainBundle] pathForResource:@"sworim" ofType:@"sqlite"];
