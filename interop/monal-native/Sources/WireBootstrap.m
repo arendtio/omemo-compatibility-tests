@@ -90,8 +90,9 @@ static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL 
     // stream features when it expects a pipelined STARTTLS upgrade (xmpp.m ~3170).
     Ivar tlsIvar = class_getInstanceVariable(object_getClass(self), "_startTLSComplete");
     if (tlsIvar) {
-        BOOL yes = YES;
-        object_setInstanceVariable(self, ivar_getName(tlsIvar), (void*)&yes);
+        ptrdiff_t offset = ivar_getOffset(tlsIvar);
+        void* rawSelf = (__bridge void*)self;
+        *(BOOL*)((uintptr_t)rawSelf + offset) = YES;
     }
     wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, NO);
 }
