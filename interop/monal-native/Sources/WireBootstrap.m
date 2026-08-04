@@ -85,8 +85,9 @@ static WireStartXmppStreamIMP wireOrigStartXmppStream = NULL;
 
 static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite) {
     (void)withStartTLS;
-    // ejabberd interop disables STARTTLS; Monal's default pipeline stalls at kStateConnected.
-    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, directWrite);
+    (void)directWrite;
+    // ejabberd interop disables STARTTLS; avoid pipelined directWrite on receive queue.
+    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, NO);
 }
 
 static void installWirePlaintextXmppStream(void) {
