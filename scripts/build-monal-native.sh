@@ -113,9 +113,16 @@ rm -rf "$OUT/MonalWire.app"
 cp -R "$WIRE_APP" "$OUT/"
 chmod +x "$OUT/MonalWire.app/MonalWire"
 
-# Legacy flat path + staged frameworks (used if app Frameworks dir is empty).
+# Embed simulator frameworks into the app (monalxmpp is not always copied by Xcode for this target).
+mkdir -p "$OUT/MonalWire.app/Frameworks"
+if [[ -d "$WIRE_APP/Frameworks" ]]; then
+  cp -R "$WIRE_APP/Frameworks/"* "$OUT/MonalWire.app/Frameworks/" 2>/dev/null || true
+fi
+find "$PRODUCTS" -maxdepth 1 -name '*.framework' -exec cp -R {} "$OUT/MonalWire.app/Frameworks/" \;
+
+# Legacy flat path + extra staged frameworks for tooling.
 mkdir -p "$OUT/Frameworks"
-find "$PRODUCTS" -maxdepth 1 -name '*.framework' -exec cp -R {} "$OUT/Frameworks/" \;
+cp -R "$OUT/MonalWire.app/Frameworks/"* "$OUT/Frameworks/" 2>/dev/null || true
 ln -sf MonalWire.app/MonalWire "$OUT/MonalWire"
 
 echo "Built: $OUT/MonalWire.app"

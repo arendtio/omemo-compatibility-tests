@@ -102,6 +102,7 @@ int main(int argc, char* argv[]) {
         NSString* readyPath = [dataDir.path stringByAppendingPathComponent:@"wire-ready"];
         [@"ok" writeToFile:readyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
         printf("READY\n");
+        fflush(stdout);
 
         if ([mode isEqualToString:@"send"]) {
             if (!peer || !sendBody) {
