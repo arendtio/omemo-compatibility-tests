@@ -21,6 +21,7 @@
 @property(nonatomic, copy) NSString* lastBody;
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
 @property(nonatomic, assign) BOOL legacyBindTriggered;
+@property(nonatomic, strong) NSDate* loggedInSince;
 @end
 
 @implementation MonalWireClient
@@ -159,6 +160,16 @@
 
 - (void)triggerLegacyBindIfNeeded:(xmpp*)acc {
     if (!acc || acc.accountState != kStateLoggedIn || self.legacyBindTriggered) {
+        if (acc && acc.accountState != kStateLoggedIn) {
+            self.loggedInSince = nil;
+        }
+        return;
+    }
+    if (!self.loggedInSince) {
+        self.loggedInSince = [NSDate date];
+        return;
+    }
+    if ([self.loggedInSince timeIntervalSinceNow] > -3.0) {
         return;
     }
     self.legacyBindTriggered = YES;
@@ -168,6 +179,7 @@
 - (BOOL)waitForSessionWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     self.smacksFallbackScheduled = NO;
     self.legacyBindTriggered = NO;
+    self.loggedInSince = nil;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     xmpp* acc = nil;
     int lastLoggedState = -100;

@@ -16,6 +16,7 @@ listen:
     shaper: c2s_shaper
     access: c2s
     starttls: false
+    allow_unencrypted_sasl2: true
   -
     port: 5280
     module: ejabberd_http
