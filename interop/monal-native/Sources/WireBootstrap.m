@@ -7,7 +7,8 @@
 #import <monalxmpp/MLConstants.h>
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
-static NSMutableSet<NSNumber*>* wireSasl2RestartedAccounts = nil;
+
+static NSURL* wireDataDir = nil;
 static NSMutableDictionary<NSString*, NSString*>* wireKeychainPasswords = nil;
 
 static NSString* wireKeychainKey(NSString* service, NSString* account) {
@@ -120,15 +121,6 @@ void MonalWireRestartStreamAfterSasl2Login(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
     }
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        wireSasl2RestartedAccounts = [NSMutableSet new];
-    });
-    NSNumber* accountID = account.accountID;
-    if (!accountID || [wireSasl2RestartedAccounts containsObject:accountID]) {
-        return;
-    }
-    [wireSasl2RestartedAccounts addObject:accountID];
 
     fprintf(stderr, "MonalWire: SASL2 logged in without session — restarting stream for bind\n");
     fflush(stderr);
