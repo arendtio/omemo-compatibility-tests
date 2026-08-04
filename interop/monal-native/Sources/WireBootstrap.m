@@ -3,6 +3,7 @@
 #import <SAMKeychain/SAMKeychain.h>
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
+#import <monalxmpp/xmpp.h>
 
 static NSURL* wireDataDir = nil;
 static NSMutableDictionary<NSString*, NSString*>* wireKeychainPasswords = nil;
@@ -79,6 +80,26 @@ static void installWireKeychainShim(void) {
     }
 }
 
+typedef void (*WireStartXmppStreamIMP)(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite);
+static WireStartXmppStreamIMP wireOrigStartXmppStream = NULL;
+
+static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite) {
+    (void)withStartTLS;
+    // ejabberd interop disables STARTTLS; Monal's default pipeline stalls at kStateConnected.
+    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, directWrite);
+}
+
+static void installWirePlaintextXmppStream(void) {
+    Class cls = [xmpp class];
+    SEL sel = @selector(startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:);
+    Method method = class_getInstanceMethod(cls, sel);
+    if (!method || wireOrigStartXmppStream) {
+        return;
+    }
+    wireOrigStartXmppStream = (WireStartXmppStreamIMP)method_getImplementation(method);
+    method_setImplementation(method, (IMP)wireStartXmppStream);
+}
+
 @implementation NSObject (MonalWireHelperTools)
 
 + (NSURL*) monalWire_getContainerURLForPathComponents:(NSArray*) components {
@@ -115,6 +136,9 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
 
     // Headless simulator CLI: real keychain often fails; keep passwords in-process.
     installWireKeychainShim();
+
+    // Plaintext ejabberd interop: do not pipeline STARTTLS on stream open.
+    installWirePlaintextXmppStream();
 
     // Headless wire: skip device-id migration that reads keychain (Rust panic in simulator CLI).
     [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];
