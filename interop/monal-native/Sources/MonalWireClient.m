@@ -94,8 +94,19 @@
                             forceDirectTLS:NO
                             allowPlainAuth:YES];
     if (!accountID) {
+        NSArray* elements = [self.jid componentsSeparatedByString:@"@"];
+        if ([elements count] > 1) {
+            NSString* user = ((NSString*)[elements objectAtIndex:0]).lowercaseString;
+            NSString* domain = ((NSString*)[elements objectAtIndex:1]).lowercaseString;
+            accountID = [[DataLayer sharedInstance] accountIDForUser:user andDomain:domain];
+            if (accountID) {
+                [manager addNewAccountToKeychainAndConnectWithPassword:self.password andAccountID:accountID];
+            }
+        }
+    }
+    if (!accountID) {
         if (error) {
-            *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed (account may already exist in data dir)"}];
+            *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
         }
         return NO;
     }
@@ -113,7 +124,10 @@
     acc = [self account];
     if (!acc || acc.accountState < kStateInitStarted) {
         if (error) {
-            *error = [NSError errorWithDomain:@"MonalWire" code:2 userInfo:@{NSLocalizedDescriptionKey: @"timeout waiting for XMPP session"}];
+            int state = acc ? (int)acc.accountState : -99;
+            *error = [NSError errorWithDomain:@"MonalWire" code:2 userInfo:@{
+                NSLocalizedDescriptionKey: [NSString stringWithFormat:@"timeout waiting for XMPP session (state=%d)", state],
+            }];
         }
         return NO;
     }

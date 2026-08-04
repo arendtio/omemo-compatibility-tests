@@ -1,6 +1,7 @@
 #import "WireBootstrap.h"
 #import <objc/runtime.h>
 #import <monalxmpp/HelperTools.h>
+#import <monalxmpp/MLProcessLock.h>
 
 static NSURL* wireDataDir = nil;
 
@@ -36,6 +37,11 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
     [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];
     [[HelperTools defaultsDB] setBool:NO forKey:@"udpLoggerEnabled"];
     [[HelperTools defaultsDB] synchronize];
+
+    // xmpp connect checks NotificationServiceExtension via flock on locks/; without this,
+    // MLProcessLock throws and connect never progresses past kStateReconnecting.
+    [MLProcessLock initializeForProcess:@"MonalWire"];
+    [MLProcessLock lock];
 
     NSString* dbPath = [[dataDir URLByAppendingPathComponent:@"sworim.sqlite"] path];
     if (![[NSFileManager defaultManager] fileExistsAtPath:dbPath]) {

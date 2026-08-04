@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "MonalWireClient.h"
+#import "WireBootstrap.h"
 
 static void usage(void) {
     fprintf(stderr, "Usage: MonalWire --mode <send|wait> [--peer JID] [--send BODY] [--expect BODY] -- --jid JID --password PASS [--host HOST] [--port PORT] [--data-dir PATH]\n");
@@ -66,6 +67,9 @@ int main(int argc, char* argv[]) {
         }
 
         NSURL* dataDir = [NSURL fileURLWithPath:dataDirPath isDirectory:YES];
+        // Bootstrap before any DataLayer / MLXMPPManager use (swizzles container paths + process lock).
+        MonalWireBootstrapInstall(dataDir);
+
         MonalWireClient* client = [[MonalWireClient alloc] initWithJid:jid
                                                               password:password
                                                                   host:host
