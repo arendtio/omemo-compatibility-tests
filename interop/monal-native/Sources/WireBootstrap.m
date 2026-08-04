@@ -1,5 +1,6 @@
 #import "WireBootstrap.h"
 #import <objc/runtime.h>
+#import <objc/message.h>
 #import <SAMKeychain/SAMKeychain.h>
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
@@ -108,6 +109,34 @@ static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL 
     wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, YES);
 }
 
+typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay);
+static WireProcessInputIMP wireOrigProcessInput = NULL;
+
+static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay) {
+    if (!self.connectionProperties.server.isDirectTLS) {
+        SEL checkSel = NSSelectorFromString(@"check:");
+        if ([parsedStanza respondsToSelector:checkSel]) {
+            BOOL isFeatures = ((BOOL (*)(id, SEL, NSString*))objc_msgSend)(
+                parsedStanza, checkSel, @"/{http://etherx.jabber.org/streams}features");
+            if (isFeatures) {
+                wireSetStartTLSComplete(self, YES);
+            }
+        }
+    }
+    wireOrigProcessInput(self, _cmd, parsedStanza, delayedReplay);
+}
+
+static void installWirePlaintextProcessInput(void) {
+    Class cls = [xmpp class];
+    SEL sel = @selector(processInput:withDelayedReplay:);
+    Method method = class_getInstanceMethod(cls, sel);
+    if (!method || wireOrigProcessInput) {
+        return;
+    }
+    wireOrigProcessInput = (WireProcessInputIMP)method_getImplementation(method);
+    method_setImplementation(method, (IMP)wireProcessInput);
+}
+
 static void installWirePlaintextXmppStream(void) {
     Class cls = [xmpp class];
     SEL sel = NSSelectorFromString(@"startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:");
@@ -117,6 +146,7 @@ static void installWirePlaintextXmppStream(void) {
     }
     wireOrigStartXmppStream = (WireStartXmppStreamIMP)method_getImplementation(method);
     method_setImplementation(method, (IMP)wireStartXmppStream);
+    installWirePlaintextProcessInput();
     installWirePlaintextMlStream();
     fprintf(stderr, "MonalWire: plaintext XMPP stream hook installed\n");
     fflush(stderr);

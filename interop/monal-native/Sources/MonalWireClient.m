@@ -96,18 +96,18 @@
                             hardcodedPort:portStr
                             forceDirectTLS:NO
                             allowPlainAuth:YES];
-    if (!accountID) {
+    if (accountID == nil) {
         NSArray* elements = [self.jid componentsSeparatedByString:@"@"];
         if ([elements count] > 1) {
             NSString* user = ((NSString*)[elements objectAtIndex:0]).lowercaseString;
             NSString* domain = ((NSString*)[elements objectAtIndex:1]).lowercaseString;
             accountID = [[DataLayer sharedInstance] accountIDForUser:user andDomain:domain];
-            if (accountID) {
+            if (accountID != nil) {
                 [manager addNewAccountToKeychainAndConnectWithPassword:self.password andAccountID:accountID];
             }
         }
     }
-    if (!accountID) {
+    if (accountID == nil) {
         if (error) {
             *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
         }
@@ -115,6 +115,21 @@
     }
     self.accountID = accountID;
 
+    for (int attempt = 1; attempt <= 2; attempt++) {
+        if (attempt > 1) {
+            MonalWireLog("connect: retry after failure");
+            [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:NO];
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.0]];
+            [[MLXMPPManager sharedInstance] addNewAccountToKeychainAndConnectWithPassword:self.password andAccountID:self.accountID];
+        }
+        if ([self waitForSessionWithTimeout:timeout error:error]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (BOOL)waitForSessionWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     xmpp* acc = nil;
     int lastLoggedState = -100;
@@ -124,8 +139,10 @@
         if (state != lastLoggedState) {
             fprintf(stderr, "MonalWire: connect state=%d\n", state);
             fflush(stderr);
-            if (state == kStateDisconnected || state == kStateLoggedOut) {
+            if (state == kStateDisconnected) {
                 MonalWireLog("connect: disconnected (reconnecting?)");
+            } else if (state == kStateLoggedOut) {
+                MonalWireLog("connect: logged out");
             }
             lastLoggedState = state;
         }
@@ -146,7 +163,7 @@
         return NO;
     }
 
-  deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     while ([deadline timeIntervalSinceNow] > 0) {
         if (acc.accountState >= kStateCatchupDone) {
             MonalWireLog("connect: catchup done");
@@ -222,7 +239,7 @@
 }
 
 - (void)disconnect {
-    if (self.accountID) {
+    if (self.accountID != nil) {
         [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:YES];
     }
     [[NSNotificationCenter defaultCenter] removeObserver:self];
