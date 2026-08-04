@@ -86,7 +86,13 @@ static WireStartXmppStreamIMP wireOrigStartXmppStream = NULL;
 static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite) {
     (void)withStartTLS;
     (void)directWrite;
-    // ejabberd interop disables STARTTLS; avoid pipelined directWrite on receive queue.
+    // Plaintext interop: we skip STARTTLS, but Monal's insecure handler ignores
+    // stream features when it expects a pipelined STARTTLS upgrade (xmpp.m ~3170).
+    Ivar tlsIvar = class_getInstanceVariable(object_getClass(self), "_startTLSComplete");
+    if (tlsIvar) {
+        ptrdiff_t offset = ivar_getOffset(tlsIvar);
+        *((BOOL*)((void*)self + offset)) = YES;
+    }
     wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, NO);
 }
 
