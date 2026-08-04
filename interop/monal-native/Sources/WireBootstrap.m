@@ -3,6 +3,7 @@
 #import <SAMKeychain/SAMKeychain.h>
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
+#import <monalxmpp/MLConstants.h>
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
 
@@ -173,7 +174,9 @@ static void installWirePlaintextMlStream(void) {
     wireStubMlStreamMethod(cls, NSSelectorFromString(@"channelBindingDataForType:"),
         imp_implementationWithBlock(^NSData*(id _Nonnull stream, NSString* _Nullable type) {
             (void)stream;
-            (void)type;
+            if (type != nil && [type isEqualToString:kServerDoesNotFollowXep0440Error]) {
+                return [type dataUsingEncoding:NSUTF8StringEncoding];
+            }
             return nil;
         }));
     if (class_getInstanceMethod(cls, NSSelectorFromString(@"channelBindingDataForType:"))) {
@@ -193,6 +196,15 @@ static void installWirePlaintextMlStream(void) {
             return nil;
         }));
     if (class_getInstanceMethod(cls, NSSelectorFromString(@"channelBindingData_TLSServerEndPoint"))) {
+        stubCount++;
+    }
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"supportedChannelBindingTypes"),
+        imp_implementationWithBlock(^NSArray*(id _Nonnull stream) {
+            (void)stream;
+            // Plaintext interop: no TLS channel bindings (avoids SASL2 SCRAM abort at xmpp.m ~2742).
+            return @[];
+        }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"supportedChannelBindingTypes"))) {
         stubCount++;
     }
     if (stubCount > 0) {

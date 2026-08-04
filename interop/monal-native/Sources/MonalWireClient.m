@@ -123,6 +123,9 @@
         if (state != lastLoggedState) {
             fprintf(stderr, "MonalWire: connect state=%d\n", state);
             fflush(stderr);
+            if (state == kStateDisconnected || state == kStateLoggedOut) {
+                MonalWireLog("connect: disconnected (reconnecting?)");
+            }
             lastLoggedState = state;
         }
         if (acc && acc.accountState >= kStateInitStarted) {
