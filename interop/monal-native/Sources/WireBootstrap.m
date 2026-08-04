@@ -112,46 +112,6 @@ static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL 
 typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay);
 static WireProcessInputIMP wireOrigProcessInput = NULL;
 
-static void wireMaybeRestartStreamAfterSasl2(xmpp* account, id parsedStanza) {
-    (void)parsedStanza;
-    MonalWireRestartStreamAfterSasl2Login(account);
-}
-
-void MonalWireForcePlaintextStreamReady(xmpp* account) {
-    if (!account || account.connectionProperties.server.isDirectTLS) {
-        return;
-    }
-    wireSetStartTLSComplete(account, YES);
-}
-
-void MonalWireRestartStreamAfterSasl2Login(xmpp* account) {
-    if (!account || account.accountState != kStateLoggedIn) {
-        return;
-    }
-
-    fprintf(stderr, "MonalWire: SASL2 logged in without session — restarting stream for bind\n");
-    fflush(stderr);
-
-    SEL prepareParser = NSSelectorFromString(@"prepareXMPPParser");
-    if ([account respondsToSelector:prepareParser]) {
-        ((void (*)(id, SEL))objc_msgSend)(account, prepareParser);
-    }
-    if (wireOrigStartXmppStream) {
-        wireSetStartTLSComplete(account, YES);
-        wireOrigStartXmppStream(
-            account,
-            NSSelectorFromString(@"startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:"),
-            YES,
-            NO,
-            YES);
-    } else {
-        SEL streamSel = NSSelectorFromString(@"startXMPPStreamWithXMLOpening:");
-        if ([account respondsToSelector:streamSel]) {
-            ((void (*)(id, SEL, BOOL))objc_msgSend)(account, streamSel, YES);
-        }
-    }
-}
-
 static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay) {
     if (!self.connectionProperties.server.isDirectTLS) {
         SEL checkSel = NSSelectorFromString(@"check:");
@@ -164,7 +124,6 @@ static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayed
         }
     }
     wireOrigProcessInput(self, _cmd, parsedStanza, delayedReplay);
-    wireMaybeRestartStreamAfterSasl2(self, parsedStanza);
 }
 
 static void installWirePlaintextProcessInput(void) {
@@ -297,6 +256,24 @@ static void installWirePlaintextMlStream(void) {
 
 @end
 
+void MonalWireForcePlaintextStreamReady(xmpp* account) {
+    if (!account || account.connectionProperties.server.isDirectTLS) {
+        return;
+    }
+    wireSetStartTLSComplete(account, YES);
+}
+
+void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
+    if (!account || account.accountState != kStateLoggedIn) {
+        return;
+    }
+    [account setValue:@NO forKey:@"resuming"];
+    [account setValue:nil forKey:@"streamID"];
+    fprintf(stderr, "MonalWire: triggering legacy bind after SASL2\n");
+    fflush(stderr);
+    [account bindResource:account.connectionProperties.identity.resource];
+}
+
 void MonalWireBootstrapInstall(NSURL* dataDir) {
     static BOOL installed = NO;
     if (installed) {
@@ -330,6 +307,7 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
     // Headless wire: skip device-id migration that reads keychain (Rust panic in simulator CLI).
     [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];
     [[HelperTools defaultsDB] setBool:NO forKey:@"udpLoggerEnabled"];
+    [[HelperTools defaultsDB] setBool:NO forKey:@"preventLeaksBeforeAuth"];
     [[HelperTools defaultsDB] synchronize];
 
     // xmpp connect checks NotificationServiceExtension via flock on locks/; without this,

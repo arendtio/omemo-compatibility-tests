@@ -9,8 +9,8 @@ void MonalWireBootstrapInstall(NSURL* dataDir);
 /// Install MLStream TLS stubs once monalxmpp is fully loaded (safe to call repeatedly).
 void MonalWireEnsurePlaintextHooks(void);
 
-/// SASL2 on ejabberd may leave the account at kStateLoggedIn without bind; restart stream for legacy bind.
-void MonalWireRestartStreamAfterSasl2Login(xmpp* account);
+/// SASL2 on ejabberd may leave the account at kStateLoggedIn without bind; send legacy bind IQ.
+void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account);
 
 /// Keep plaintext stream features on the secure processing path (ejabberd has no STARTTLS).
 void MonalWireForcePlaintextStreamReady(xmpp* account);

@@ -20,7 +20,7 @@
 @property(nonatomic, strong) NSNumber* accountID;
 @property(nonatomic, copy) NSString* lastBody;
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
-@property(nonatomic, assign) BOOL sasl2RestartTriggered;
+@property(nonatomic, assign) BOOL legacyBindTriggered;
 @end
 
 @implementation MonalWireClient
@@ -153,17 +153,17 @@
     }
 }
 
-- (void)triggerSasl2StreamRestartIfNeeded:(xmpp*)acc {
-    if (!acc || acc.accountState != kStateLoggedIn || self.sasl2RestartTriggered) {
+- (void)triggerLegacyBindIfNeeded:(xmpp*)acc {
+    if (!acc || acc.accountState != kStateLoggedIn || self.legacyBindTriggered) {
         return;
     }
-    self.sasl2RestartTriggered = YES;
-    MonalWireRestartStreamAfterSasl2Login(acc);
+    self.legacyBindTriggered = YES;
+    MonalWireTriggerLegacyBindAfterSasl2(acc);
 }
 
 - (BOOL)waitForSessionWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     self.smacksFallbackScheduled = NO;
-    self.sasl2RestartTriggered = NO;
+    self.legacyBindTriggered = NO;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     xmpp* acc = nil;
     int lastLoggedState = -100;
@@ -183,11 +183,11 @@
         if (acc && acc.accountState < kStateHasStream) {
             MonalWireForcePlaintextStreamReady(acc);
         }
-        [self triggerSasl2StreamRestartIfNeeded:acc];
+        [self triggerLegacyBindIfNeeded:acc];
         [self triggerSmacksFallbackIfNeeded:acc];
         if (acc && acc.accountState >= kStateInitStarted) {
             MonalWireLog("connect: init started");
-            break;
+            return YES;
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
     }
@@ -201,19 +201,7 @@
         }
         return NO;
     }
-
-    deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
-    while ([deadline timeIntervalSinceNow] > 0) {
-        if (acc.accountState >= kStateCatchupDone) {
-            MonalWireLog("connect: catchup done");
-            return YES;
-        }
-        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
-    }
-    if (error) {
-        *error = [NSError errorWithDomain:@"MonalWire" code:3 userInfo:@{NSLocalizedDescriptionKey: @"timeout waiting for catchup"}];
-    }
-    return NO;
+    return YES;
 }
 
 - (BOOL)preparePeer:(NSString*)peerJid error:(NSError**)error {
