@@ -1,5 +1,6 @@
 #import "MonalWireClient.h"
 #import "WireBootstrap.h"
+#import <monalxmpp/DataLayer.h>
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLXMPPManager.h>
 #import <monalxmpp/MLContact.h>
