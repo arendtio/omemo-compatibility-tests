@@ -112,6 +112,54 @@ static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL 
 typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay);
 static WireProcessInputIMP wireOrigProcessInput = NULL;
 
+static void wireMaybeRestartStreamAfterSasl2(xmpp* account, id parsedStanza) {
+    if (!account || account.accountState != kStateLoggedIn) {
+        return;
+    }
+    SEL checkSel = NSSelectorFromString(@"check:");
+    if (![parsedStanza respondsToSelector:checkSel]) {
+        return;
+    }
+    BOOL isSasl2Success = ((BOOL (*)(id, SEL, NSString*))objc_msgSend)(
+        parsedStanza, checkSel, @"/{urn:xmpp:sasl:2}success");
+    if (!isSasl2Success) {
+        return;
+    }
+
+    static NSMutableSet<NSNumber*>* restartedAccounts = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        restartedAccounts = [NSMutableSet new];
+    });
+    NSNumber* accountID = account.accountID;
+    if (!accountID || [restartedAccounts containsObject:accountID]) {
+        return;
+    }
+    [restartedAccounts addObject:accountID];
+
+    fprintf(stderr, "MonalWire: SASL2 success without session init — restarting stream for bind\n");
+    fflush(stderr);
+
+    SEL prepareParser = NSSelectorFromString(@"prepareXMPPParser");
+    if ([account respondsToSelector:prepareParser]) {
+        ((void (*)(id, SEL))objc_msgSend)(account, prepareParser);
+    }
+    if (wireOrigStartXmppStream) {
+        wireSetStartTLSComplete(account, YES);
+        wireOrigStartXmppStream(
+            account,
+            NSSelectorFromString(@"startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:"),
+            YES,
+            NO,
+            YES);
+    } else {
+        SEL streamSel = NSSelectorFromString(@"startXMPPStreamWithXMLOpening:");
+        if ([account respondsToSelector:streamSel]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(account, streamSel, YES);
+        }
+    }
+}
+
 static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay) {
     if (!self.connectionProperties.server.isDirectTLS) {
         SEL checkSel = NSSelectorFromString(@"check:");
@@ -124,6 +172,7 @@ static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayed
         }
     }
     wireOrigProcessInput(self, _cmd, parsedStanza, delayedReplay);
+    wireMaybeRestartStreamAfterSasl2(self, parsedStanza);
 }
 
 static void installWirePlaintextProcessInput(void) {
