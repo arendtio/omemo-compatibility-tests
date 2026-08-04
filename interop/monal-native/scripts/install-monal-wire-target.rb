@@ -39,6 +39,27 @@ def normalize_monal_wire_target(target, info_plist)
   end
 end
 
+WIRE_SOURCES = %w[main.m MonalWireClient.m WireBootstrap.m MonalWireLog.m].freeze
+
+def ensure_wire_sources(project, target, sources_dir)
+  group = project.main_group.children.find { |g| g.display_name == "MonalWire" }
+  unless group
+    group = project.main_group.new_group("MonalWire", sources_dir)
+  end
+  WIRE_SOURCES.each do |src|
+    path = File.join(sources_dir, src)
+    unless File.file?(path)
+      warn "MonalWire source missing: #{path}"
+      next
+    end
+    file_ref = group.files.find { |f| f.path == src } || group.new_file(src)
+    unless target.source_build_phase.files_references.include?(file_ref)
+      target.source_build_phase.add_file_reference(file_ref)
+      puts "Added #{src} to MonalWire target"
+    end
+  end
+end
+
 project = Xcodeproj::Project.open(project_path)
 existing = project.targets.find { |t| t.name == "MonalWire" }
 
@@ -46,7 +67,7 @@ unless existing
   group = project.main_group.new_group("MonalWire", sources_dir)
   target = project.new_target(:application, "MonalWire", :ios, "14.0")
 
-  %w[main.m MonalWireClient.m WireBootstrap.m MonalWireLog.m].each do |src|
+  WIRE_SOURCES.each do |src|
     file_ref = group.new_file(src)
     target.source_build_phase.add_file_reference(file_ref)
   end
@@ -69,6 +90,7 @@ unless existing
   puts "Added MonalWire target to Monal.xcodeproj"
 else
   puts "MonalWire target already present"
+  ensure_wire_sources(project, existing, sources_dir)
   normalize_monal_wire_target(existing, info_plist)
   project.save
 end
