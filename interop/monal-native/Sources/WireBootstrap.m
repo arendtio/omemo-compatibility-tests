@@ -6,9 +6,6 @@
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
 
-@interface MLStream : NSObject
-@end
-
 static NSURL* wireDataDir = nil;
 static NSMutableDictionary<NSString*, NSString*>* wireKeychainPasswords = nil;
 
@@ -87,18 +84,27 @@ static void installWireKeychainShim(void) {
 typedef void (*WireStartXmppStreamIMP)(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite);
 static WireStartXmppStreamIMP wireOrigStartXmppStream = NULL;
 
+static void installWirePlaintextMlStream(void);
+
+static void wireSetStartTLSComplete(xmpp* account, BOOL value) {
+    Ivar tlsIvar = class_getInstanceVariable([xmpp class], "_startTLSComplete");
+    if (!tlsIvar) {
+        fprintf(stderr, "MonalWire: _startTLSComplete ivar missing\n");
+        fflush(stderr);
+        return;
+    }
+    ptrdiff_t offset = ivar_getOffset(tlsIvar);
+    void* rawSelf = (__bridge void*)account;
+    *(BOOL*)((uintptr_t)rawSelf + offset) = value;
+}
+
 static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite) {
     (void)withStartTLS;
     (void)directWrite;
-    // Plaintext interop: we skip STARTTLS, but Monal's insecure handler ignores
-    // stream features when it expects a pipelined STARTTLS upgrade (xmpp.m ~3170).
-    Ivar tlsIvar = class_getInstanceVariable(object_getClass(self), "_startTLSComplete");
-    if (tlsIvar) {
-        ptrdiff_t offset = ivar_getOffset(tlsIvar);
-        void* rawSelf = (__bridge void*)self;
-        *(BOOL*)((uintptr_t)rawSelf + offset) = YES;
-    }
-    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, NO);
+    // Plaintext interop: skip STARTTLS but treat stream features as post-TLS (xmpp.m ~3170).
+    wireSetStartTLSComplete(self, YES);
+    // Keep Monal's directWrite pipelining so the stream header is sent before TCP open completes.
+    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, YES);
 }
 
 static void installWirePlaintextXmppStream(void) {
@@ -110,8 +116,41 @@ static void installWirePlaintextXmppStream(void) {
     }
     wireOrigStartXmppStream = (WireStartXmppStreamIMP)method_getImplementation(method);
     method_setImplementation(method, (IMP)wireStartXmppStream);
+    installWirePlaintextMlStream();
     fprintf(stderr, "MonalWire: plaintext XMPP stream hook installed\n");
     fflush(stderr);
+}
+
+static void installWirePlaintextMlStream(void) {
+    static BOOL mlStreamHookInstalled = NO;
+    if (mlStreamHookInstalled) {
+        return;
+    }
+    Class cls = NSClassFromString(@"MLStream");
+    if (!cls) {
+        return;
+    }
+    SEL tlsSel = NSSelectorFromString(@"tlsVersion");
+    Method tlsM = class_getInstanceMethod(cls, tlsSel);
+    if (tlsM) {
+        method_setImplementation(tlsM, imp_implementationWithBlock(^uint16_t(id _Nonnull stream) {
+            (void)stream;
+            return tls_protocol_version_TLSv12;
+        }));
+    }
+    SEL t13Sel = NSSelectorFromString(@"isTLS13");
+    Method t13M = class_getInstanceMethod(cls, t13Sel);
+    if (t13M) {
+        method_setImplementation(t13M, imp_implementationWithBlock(^BOOL(id _Nonnull stream) {
+            (void)stream;
+            return NO;
+        }));
+    }
+    if (tlsM || t13M) {
+        mlStreamHookInstalled = YES;
+        fprintf(stderr, "MonalWire: plaintext MLStream TLS hook installed\n");
+        fflush(stderr);
+    }
 }
 
 @implementation NSObject (MonalWireHelperTools)
@@ -182,4 +221,8 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
             }
         }
     }
+}
+
+void MonalWireEnsurePlaintextHooks(void) {
+    installWirePlaintextMlStream();
 }

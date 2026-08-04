@@ -1,6 +1,5 @@
 #import "MonalWireClient.h"
-
-#import <monalxmpp/DataLayer.h>
+#import "WireBootstrap.h"
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLXMPPManager.h>
 #import <monalxmpp/MLContact.h>
@@ -77,6 +76,7 @@
 
 - (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     [HelperTools initSystem];
+    MonalWireEnsurePlaintextHooks();
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleNewMessage:)
