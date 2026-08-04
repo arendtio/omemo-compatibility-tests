@@ -121,6 +121,13 @@ static void installWirePlaintextXmppStream(void) {
     fflush(stderr);
 }
 
+static void wireStubMlStreamMethod(Class cls, SEL sel, IMP imp) {
+    Method method = class_getInstanceMethod(cls, sel);
+    if (method) {
+        method_setImplementation(method, imp);
+    }
+}
+
 static void installWirePlaintextMlStream(void) {
     static BOOL mlStreamHookInstalled = NO;
     if (mlStreamHookInstalled) {
@@ -130,25 +137,67 @@ static void installWirePlaintextMlStream(void) {
     if (!cls) {
         return;
     }
-    SEL tlsSel = NSSelectorFromString(@"tlsVersion");
-    Method tlsM = class_getInstanceMethod(cls, tlsSel);
-    if (tlsM) {
-        method_setImplementation(tlsM, imp_implementationWithBlock(^uint16_t(id _Nonnull stream) {
+    int stubCount = 0;
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"tlsVersion"),
+        imp_implementationWithBlock(^uint16_t(id _Nonnull stream) {
             (void)stream;
             return tls_protocol_version_TLSv12;
         }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"tlsVersion"))) {
+        stubCount++;
     }
-    SEL t13Sel = NSSelectorFromString(@"isTLS13");
-    Method t13M = class_getInstanceMethod(cls, t13Sel);
-    if (t13M) {
-        method_setImplementation(t13M, imp_implementationWithBlock(^BOOL(id _Nonnull stream) {
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"isTLS13"),
+        imp_implementationWithBlock(^BOOL(id _Nonnull stream) {
             (void)stream;
             return NO;
         }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"isTLS13"))) {
+        stubCount++;
     }
-    if (tlsM || t13M) {
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"isTLS12"),
+        imp_implementationWithBlock(^BOOL(id _Nonnull stream) {
+            (void)stream;
+            return YES;
+        }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"isTLS12"))) {
+        stubCount++;
+    }
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"acceptedTlsEarlyData"),
+        imp_implementationWithBlock(^BOOL(id _Nonnull stream) {
+            (void)stream;
+            return NO;
+        }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"acceptedTlsEarlyData"))) {
+        stubCount++;
+    }
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"channelBindingDataForType:"),
+        imp_implementationWithBlock(^NSData*(id _Nonnull stream, NSString* _Nullable type) {
+            (void)stream;
+            (void)type;
+            return nil;
+        }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"channelBindingDataForType:"))) {
+        stubCount++;
+    }
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"channelBindingData_TLSExporter"),
+        imp_implementationWithBlock(^NSData*(id _Nonnull stream) {
+            (void)stream;
+            return nil;
+        }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"channelBindingData_TLSExporter"))) {
+        stubCount++;
+    }
+    wireStubMlStreamMethod(cls, NSSelectorFromString(@"channelBindingData_TLSServerEndPoint"),
+        imp_implementationWithBlock(^NSData*(id _Nonnull stream) {
+            (void)stream;
+            return nil;
+        }));
+    if (class_getInstanceMethod(cls, NSSelectorFromString(@"channelBindingData_TLSServerEndPoint"))) {
+        stubCount++;
+    }
+    if (stubCount > 0) {
         mlStreamHookInstalled = YES;
-        fprintf(stderr, "MonalWire: plaintext MLStream TLS hook installed\n");
+        fprintf(stderr, "MonalWire: plaintext MLStream TLS hook installed (%d methods)\n", stubCount);
         fflush(stderr);
     }
 }
