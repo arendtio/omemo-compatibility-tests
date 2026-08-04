@@ -91,7 +91,7 @@ static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL 
 
 static void installWirePlaintextXmppStream(void) {
     Class cls = [xmpp class];
-    SEL sel = @selector(startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:);
+    SEL sel = NSSelectorFromString(@"startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:");
     Method method = class_getInstanceMethod(cls, sel);
     if (!method || wireOrigStartXmppStream) {
         return;
