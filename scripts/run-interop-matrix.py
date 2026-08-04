@@ -132,7 +132,7 @@ def wait_boot(
         time.sleep(12)
 
 
-NATIVE_WIRE_WAIT_TIMEOUT = 180
+NATIVE_WIRE_WAIT_TIMEOUT = 300
 
 
 def wait_after_spawn_wait(

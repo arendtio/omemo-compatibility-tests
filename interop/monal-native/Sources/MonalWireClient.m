@@ -1,5 +1,6 @@
 #import "MonalWireClient.h"
 #import "WireBootstrap.h"
+#import "MonalWireLog.h"
 #import <monalxmpp/DataLayer.h>
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLXMPPManager.h>
@@ -73,9 +74,11 @@
         return;
     }
     self.lastBody = message.messageText;
+    MonalWireLog([[NSString stringWithFormat:@"incoming body=%@", message.messageText] UTF8String]);
 }
 
 - (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
+    MonalWireLog("connect: begin");
     [HelperTools initSystem];
     MonalWireEnsurePlaintextHooks();
 
@@ -123,6 +126,7 @@
             lastLoggedState = state;
         }
         if (acc && acc.accountState >= kStateInitStarted) {
+            MonalWireLog("connect: init started");
             break;
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
@@ -141,6 +145,7 @@
   deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     while ([deadline timeIntervalSinceNow] > 0) {
         if (acc.accountState >= kStateCatchupDone) {
+            MonalWireLog("connect: catchup done");
             return YES;
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
@@ -152,6 +157,7 @@
 }
 
 - (BOOL)preparePeer:(NSString*)peerJid error:(NSError**)error {
+    MonalWireLog([[NSString stringWithFormat:@"preparePeer: %@", peerJid] UTF8String]);
     xmpp* acc = [self account];
     if (!acc) {
         if (error) {
@@ -173,6 +179,7 @@
 }
 
 - (BOOL)sendEncrypted:(NSString*)peerJid body:(NSString*)body error:(NSError**)error {
+    MonalWireLog([[NSString stringWithFormat:@"sendEncrypted: peer=%@ body=%@", peerJid, body] UTF8String]);
     if (![self preparePeer:peerJid error:error]) {
         return NO;
     }
@@ -185,6 +192,7 @@
 }
 
 - (BOOL)awaitBody:(NSString*)expected timeout:(NSTimeInterval)timeout {
+    MonalWireLog([[NSString stringWithFormat:@"awaitBody: expect=%@", expected] UTF8String]);
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     while ([deadline timeIntervalSinceNow] > 0) {
         if ([self.lastBody isEqualToString:expected]) {

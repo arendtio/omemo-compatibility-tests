@@ -46,7 +46,7 @@ unless existing
   group = project.main_group.new_group("MonalWire", sources_dir)
   target = project.new_target(:application, "MonalWire", :ios, "14.0")
 
-  %w[main.m MonalWireClient.m WireBootstrap.m].each do |src|
+  %w[main.m MonalWireClient.m WireBootstrap.m MonalWireLog.m].each do |src|
     file_ref = group.new_file(src)
     target.source_build_phase.add_file_reference(file_ref)
   end
