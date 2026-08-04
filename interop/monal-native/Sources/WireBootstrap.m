@@ -128,7 +128,7 @@ static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayed
 
 static void installWirePlaintextProcessInput(void) {
     Class cls = [xmpp class];
-    SEL sel = @selector(processInput:withDelayedReplay:);
+    SEL sel = NSSelectorFromString(@"processInput:withDelayedReplay:");
     Method method = class_getInstanceMethod(cls, sel);
     if (!method || wireOrigProcessInput) {
         return;
