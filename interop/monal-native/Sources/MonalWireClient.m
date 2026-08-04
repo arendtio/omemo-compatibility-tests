@@ -1,5 +1,4 @@
 #import "MonalWireClient.h"
-#import "WireBootstrap.h"
 
 #import <monalxmpp/DataLayer.h>
 #import <monalxmpp/HelperTools.h>
@@ -77,7 +76,6 @@
 }
 
 - (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
-    MonalWireBootstrapInstall(self.dataDir);
     [HelperTools initSystem];
 
     [[NSNotificationCenter defaultCenter] addObserver:self

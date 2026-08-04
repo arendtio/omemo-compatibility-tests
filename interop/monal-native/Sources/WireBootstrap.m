@@ -18,6 +18,12 @@ static NSURL* wireDataDir = nil;
 @end
 
 void MonalWireBootstrapInstall(NSURL* dataDir) {
+    static BOOL installed = NO;
+    if (installed) {
+        return;
+    }
+    installed = YES;
+
     wireDataDir = dataDir;
     [dataDir setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
     NSError* err = nil;
