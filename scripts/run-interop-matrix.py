@@ -579,12 +579,38 @@ def ejabberd_interop_env() -> dict[str, str]:
     return env
 
 
-def ejabberd_listening() -> bool:
+def ejabberd_listening(host: str = "127.0.0.1") -> bool:
     try:
-        with socket.create_connection(("127.0.0.1", 5222), timeout=2):
+        with socket.create_connection((host, 5222), timeout=2):
             return True
     except OSError:
         return False
+
+
+def ejabberd_simulator_reachable() -> bool:
+    """True when ejabberd accepts C2S on the Mac LAN IP (needed for iOS Simulator Monal wire)."""
+    if os.name != "posix" or os.uname().sysname != "Darwin":
+        return True
+    try:
+        ip = subprocess.check_output(["ipconfig", "getifaddr", "en0"], text=True).strip()
+        if ip and ejabberd_listening(ip):
+            return True
+    except (subprocess.CalledProcessError, OSError):
+        pass
+    return False
+
+
+def ensure_ejabberd() -> int:
+    env = ejabberd_interop_env()
+    if ejabberd_listening() and ejabberd_simulator_reachable():
+        print("ejabberd listening on 127.0.0.1:5222 and simulator LAN IP")
+        return 0
+    if ejabberd_listening():
+        print("ejabberd on 127.0.0.1 only — restarting for simulator reachability")
+    start = ROOT / "scripts" / "start-ejabberd-interop.sh"
+    if start.exists():
+        return subprocess.call([str(start)], cwd=ROOT, env=env)
+    return 0
 
 
 def ejabberdctl_cmd() -> list[str]:
@@ -595,17 +621,6 @@ def ejabberdctl_cmd() -> list[str]:
     if shutil.which("sudo"):
         return ["sudo", "-E", *base]
     return base
-
-
-def ensure_ejabberd() -> int:
-    env = ejabberd_interop_env()
-    if ejabberd_listening():
-        print("ejabberd already listening on 127.0.0.1:5222")
-        return 0
-    start = ROOT / "scripts" / "start-ejabberd-interop.sh"
-    if start.exists():
-        return subprocess.call([str(start)], cwd=ROOT, env=env)
-    return 0
 
 
 def reset_localhost_users() -> None:

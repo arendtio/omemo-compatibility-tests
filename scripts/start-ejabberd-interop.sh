@@ -59,13 +59,20 @@ fi
 
 install_interop_config
 
-if $was_running; then
-  echo "ejabberd already running (skipping restart)"
-else
-  echo "Starting ejabberd with $CONFIG"
-  rm -rf "${SPOOL:?}"/* 2>/dev/null || sudo rm -rf "${SPOOL:?}"/* 2>/dev/null || true
-  run_ctl start
+was_running=false
+if run_ctl status >/dev/null 2>&1; then
+  was_running=true
 fi
+
+if $was_running; then
+  echo "Stopping ejabberd to apply interop config ($CONFIG)"
+  run_ctl stop || true
+  sleep 2
+fi
+
+echo "Starting ejabberd with $CONFIG"
+rm -rf "${SPOOL:?}"/* 2>/dev/null || sudo rm -rf "${SPOOL:?}"/* 2>/dev/null || true
+run_ctl start
 
 for _ in $(seq 1 30); do
   if run_ctl status >/dev/null 2>&1; then
