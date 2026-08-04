@@ -10,6 +10,7 @@ loglevel: warning
 listen:
   -
     port: 5222
+    ip: "0.0.0.0"
     module: ejabberd_c2s
     max_stanza_size: 262144
     shaper: c2s_shaper
