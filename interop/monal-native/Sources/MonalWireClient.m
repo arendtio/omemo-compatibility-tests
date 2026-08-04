@@ -138,18 +138,28 @@
         return;
     }
     self.smacksFallbackScheduled = YES;
-    if (acc.connectionProperties.supportsSM3) {
-        MonalWireLog("connect: sending smacks enable after bind");
-        MLXMLNode* enable = [[MLXMLNode alloc]
-            initWithElement:@"enable"
-            andNamespace:@"urn:xmpp:sm:3"
-            withAttributes:@{@"resume": @"true"}
-            andChildren:@[]
-            andData:nil];
-        [acc send:enable];
+    MonalWireLog("connect: scheduling smacks/init fallback after bind");
+    xmpp* account = acc;
+    SEL dispatchSel = NSSelectorFromString(@"dispatchAsyncOnReceiveQueue:");
+    void (^block)(void) = ^{
+        if (account.connectionProperties.supportsSM3) {
+            MonalWireLog("connect: sending smacks enable after bind");
+            MLXMLNode* enable = [[MLXMLNode alloc]
+                initWithElement:@"enable"
+                andNamespace:@"urn:xmpp:sm:3"
+                withAttributes:@{@"resume": @"true"}
+                andChildren:@[]
+                andData:nil];
+            [account send:enable];
+        } else {
+            MonalWireLog("connect: initSession after bind (no smacks)");
+            [account initSession];
+        }
+    };
+    if ([account respondsToSelector:dispatchSel]) {
+        ((void (*)(id, SEL, void (^)(void)))objc_msgSend)(account, dispatchSel, block);
     } else {
-        MonalWireLog("connect: initSession after bind (no smacks)");
-        [acc initSession];
+        block();
     }
 }
 

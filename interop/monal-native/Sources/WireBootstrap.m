@@ -267,11 +267,20 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
     }
-    [account setValue:@NO forKey:@"resuming"];
-    [account setValue:nil forKey:@"streamID"];
     fprintf(stderr, "MonalWire: triggering legacy bind after SASL2\n");
     fflush(stderr);
-    [account bindResource:account.connectionProperties.identity.resource];
+    NSString* resource = [account.connectionProperties.identity.resource copy];
+    SEL dispatchSel = NSSelectorFromString(@"dispatchAsyncOnReceiveQueue:");
+    void (^bindBlock)(void) = ^{
+        [account setValue:@NO forKey:@"resuming"];
+        [account setValue:nil forKey:@"streamID"];
+        [account bindResource:resource];
+    };
+    if ([account respondsToSelector:dispatchSel]) {
+        ((void (*)(id, SEL, void (^)(void)))objc_msgSend)(account, dispatchSel, bindBlock);
+    } else {
+        bindBlock();
+    }
 }
 
 void MonalWireBootstrapInstall(NSURL* dataDir) {
