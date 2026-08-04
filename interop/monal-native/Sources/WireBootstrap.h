@@ -15,4 +15,7 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account);
 /// Keep plaintext stream features on the secure processing path (ejabberd has no STARTTLS).
 void MonalWireForcePlaintextStreamReady(xmpp* account);
 
+/// Run block on Monal's XMPP receive queue (required for bind/session ops).
+void MonalWireDispatchOnReceiveQueue(xmpp* account, void (^block)(void));
+
 NS_ASSUME_NONNULL_END

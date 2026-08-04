@@ -140,8 +140,7 @@
     self.smacksFallbackScheduled = YES;
     MonalWireLog("connect: scheduling smacks/init fallback after bind");
     xmpp* account = acc;
-    SEL dispatchSel = NSSelectorFromString(@"dispatchAsyncOnReceiveQueue:");
-    void (^block)(void) = ^{
+    MonalWireDispatchOnReceiveQueue(account, ^{
         if (account.connectionProperties.supportsSM3) {
             MonalWireLog("connect: sending smacks enable after bind");
             MLXMLNode* enable = [[MLXMLNode alloc]
@@ -155,12 +154,7 @@
             MonalWireLog("connect: initSession after bind (no smacks)");
             [account initSession];
         }
-    };
-    if ([account respondsToSelector:dispatchSel]) {
-        ((void (*)(id, SEL, void (^)(void)))objc_msgSend)(account, dispatchSel, block);
-    } else {
-        block();
-    }
+    });
 }
 
 - (void)triggerLegacyBindIfNeeded:(xmpp*)acc {

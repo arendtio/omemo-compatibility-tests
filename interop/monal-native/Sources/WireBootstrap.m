@@ -263,6 +263,18 @@ void MonalWireForcePlaintextStreamReady(xmpp* account) {
     wireSetStartTLSComplete(account, YES);
 }
 
+void MonalWireDispatchOnReceiveQueue(xmpp* account, void (^block)(void)) {
+    if (!account || !block) {
+        return;
+    }
+    SEL dispatchSel = NSSelectorFromString(@"dispatchAsyncOnReceiveQueue:");
+    if ([account respondsToSelector:dispatchSel]) {
+        ((void (*)(id, SEL, void (^)(void)))objc_msgSend)(account, dispatchSel, block);
+    } else {
+        block();
+    }
+}
+
 void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
@@ -270,17 +282,11 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     fprintf(stderr, "MonalWire: triggering legacy bind after SASL2\n");
     fflush(stderr);
     NSString* resource = [account.connectionProperties.identity.resource copy];
-    SEL dispatchSel = NSSelectorFromString(@"dispatchAsyncOnReceiveQueue:");
-    void (^bindBlock)(void) = ^{
+    MonalWireDispatchOnReceiveQueue(account, ^{
         [account setValue:@NO forKey:@"resuming"];
         [account setValue:nil forKey:@"streamID"];
         [account bindResource:resource];
-    };
-    if ([account respondsToSelector:dispatchSel]) {
-        ((void (*)(id, SEL, void (^)(void)))objc_msgSend)(account, dispatchSel, bindBlock);
-    } else {
-        bindBlock();
-    }
+    });
 }
 
 void MonalWireBootstrapInstall(NSURL* dataDir) {
