@@ -98,6 +98,8 @@ static void installWirePlaintextXmppStream(void) {
     }
     wireOrigStartXmppStream = (WireStartXmppStreamIMP)method_getImplementation(method);
     method_setImplementation(method, (IMP)wireStartXmppStream);
+    fprintf(stderr, "MonalWire: plaintext XMPP stream hook installed\n");
+    fflush(stderr);
 }
 
 @implementation NSObject (MonalWireHelperTools)
@@ -139,6 +141,8 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
 
     // Plaintext ejabberd interop: do not pipeline STARTTLS on stream open.
     installWirePlaintextXmppStream();
+
+    [HelperTools signalResumption];
 
     // Headless wire: skip device-id migration that reads keychain (Rust panic in simulator CLI).
     [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];

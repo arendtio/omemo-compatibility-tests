@@ -112,8 +112,15 @@
 
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     xmpp* acc = nil;
+    int lastLoggedState = -100;
     while ([deadline timeIntervalSinceNow] > 0) {
         acc = [self account];
+        int state = acc ? (int)acc.accountState : -99;
+        if (state != lastLoggedState) {
+            fprintf(stderr, "MonalWire: connect state=%d\n", state);
+            fflush(stderr);
+            lastLoggedState = state;
+        }
         if (acc && acc.accountState >= kStateInitStarted) {
             break;
         }
