@@ -169,7 +169,8 @@
         self.loggedInSince = [NSDate date];
         return;
     }
-    if ([self.loggedInSince timeIntervalSinceNow] > -3.0) {
+    // Wait for ejabberd post-auth stream features before forcing legacy bind.
+    if ([self.loggedInSince timeIntervalSinceNow] > -8.0) {
         return;
     }
     self.legacyBindTriggered = YES;
@@ -193,6 +194,12 @@
                 MonalWireLog("connect: disconnected (reconnecting?)");
             } else if (state == kStateLoggedOut) {
                 MonalWireLog("connect: logged out");
+            } else if (state == kStateBinding) {
+                MonalWireLog("connect: binding resource");
+            } else if (state == kStateBound) {
+                MonalWireLog("connect: bound, waiting for smacks/init");
+            } else if (state >= kStateInitStarted) {
+                MonalWireLog("connect: session init started");
             }
             lastLoggedState = state;
         }

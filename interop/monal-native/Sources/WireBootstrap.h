@@ -11,8 +11,6 @@ void MonalWireEnsurePlaintextHooks(void);
 
 /// SASL2 on ejabberd may leave the account at kStateLoggedIn without bind; send legacy bind IQ.
 void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account);
-
-/// Keep plaintext stream features on the secure processing path (ejabberd has no STARTTLS).
 void MonalWireForcePlaintextStreamReady(xmpp* account);
 
 /// Run block on Monal's XMPP receive queue (required for bind/session ops).

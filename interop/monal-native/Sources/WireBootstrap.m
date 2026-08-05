@@ -5,7 +5,6 @@
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
 #import <monalxmpp/MLConstants.h>
-#import <monalxmpp/MLXMLNode.h>
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
 
@@ -114,6 +113,20 @@ typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL 
 static WireProcessInputIMP wireOrigProcessInput = NULL;
 
 static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay) {
+    if (!self.connectionProperties.server.isDirectTLS) {
+        SEL checkSel = NSSelectorFromString(@"check:");
+        if ([parsedStanza respondsToSelector:checkSel]) {
+            BOOL isFeatures = ((BOOL (*)(id, SEL, NSString*))objc_msgSend)(
+                parsedStanza, checkSel, @"/{http://etherx.jabber.org/streams}features");
+            if (isFeatures) {
+                wireSetStartTLSComplete(self, YES);
+                if (self.accountState == kStateLoggedIn) {
+                    fprintf(stderr, "MonalWire: post-auth stream features received at state 4\n");
+                    fflush(stderr);
+                }
+            }
+        }
+    }
     wireOrigProcessInput(self, _cmd, parsedStanza, delayedReplay);
 }
 
@@ -270,28 +283,18 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
     }
-    fprintf(stderr, "MonalWire: triggering post-auth bind after SASL2\n");
+    fprintf(stderr, "MonalWire: triggering legacy bind after SASL2 (no inlined bind2)\n");
     fflush(stderr);
     MonalWireDispatchOnReceiveQueue(account, ^{
-        SEL sel = NSSelectorFromString(@"handleFeaturesAfterAuth:");
-        if ([account respondsToSelector:sel]) {
-            MLXMLNode* features = [[MLXMLNode alloc]
-                initWithElement:@"features"
-                andNamespace:@"http://etherx.jabber.org/streams"
-                withAttributes:@{}
-                andChildren:@[
-                    [[MLXMLNode alloc]
-                        initWithElement:@"sm"
-                        andNamespace:@"urn:xmpp:sm:3"
-                        withAttributes:@{@"resume": @"true"}
-                        andChildren:@[]
-                        andData:nil],
-                ]
-                andData:nil];
-            ((void (*)(id, SEL, id))objc_msgSend)(account, sel, features);
-        } else {
-            [account bindResource:account.connectionProperties.identity.resource];
+        // ejabberd may complete SASL2 without inlined BIND2; clear inline flags so legacy bind is allowed.
+        @try {
+            [account setValue:@NO forKey:@"bind2Inlined"];
+            [account setValue:@NO forKey:@"smacksResumeInlined"];
+        } @catch (NSException* e) {
+            (void)e;
         }
+        NSString* resource = account.connectionProperties.identity.resource;
+        [account bindResource:resource];
     });
 }
 
@@ -328,7 +331,8 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
     // Headless wire: skip device-id migration that reads keychain (Rust panic in simulator CLI).
     [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];
     [[HelperTools defaultsDB] setBool:NO forKey:@"udpLoggerEnabled"];
-    [[HelperTools defaultsDB] setBool:NO forKey:@"preventLeaksBeforeAuth"];
+    // Disable SASL2 inline bind2/smacks: ejabberd completes auth but not inlined bind; use post-auth features + legacy bind.
+    [[HelperTools defaultsDB] setBool:YES forKey:@"preventLeaksBeforeAuth"];
     [[HelperTools defaultsDB] synchronize];
 
     // xmpp connect checks NotificationServiceExtension via flock on locks/; without this,
