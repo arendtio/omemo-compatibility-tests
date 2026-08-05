@@ -5,6 +5,7 @@
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
 #import <monalxmpp/MLConstants.h>
+#import <monalxmpp/MLXMLNode.h>
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
 
