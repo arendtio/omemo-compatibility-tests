@@ -269,11 +269,28 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
     }
-    fprintf(stderr, "MonalWire: triggering legacy bind after SASL2\n");
+    fprintf(stderr, "MonalWire: triggering post-auth bind after SASL2\n");
     fflush(stderr);
-    NSString* resource = [account.connectionProperties.identity.resource copy];
     MonalWireDispatchOnReceiveQueue(account, ^{
-        [account bindResource:resource];
+        SEL sel = NSSelectorFromString(@"handleFeaturesAfterAuth:");
+        if ([account respondsToSelector:sel]) {
+            MLXMLNode* features = [[MLXMLNode alloc]
+                initWithElement:@"features"
+                andNamespace:@"http://etherx.jabber.org/streams"
+                withAttributes:@{}
+                andChildren:@[
+                    [[MLXMLNode alloc]
+                        initWithElement:@"sm"
+                        andNamespace:@"urn:xmpp:sm:3"
+                        withAttributes:@{@"resume": @"true"}
+                        andChildren:@[]
+                        andData:nil],
+                ]
+                andData:nil];
+            ((void (*)(id, SEL, id))objc_msgSend)(account, sel, features);
+        } else {
+            [account bindResource:account.connectionProperties.identity.resource];
+        }
     });
 }
 
