@@ -113,16 +113,6 @@ typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL 
 static WireProcessInputIMP wireOrigProcessInput = NULL;
 
 static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay) {
-    if (!self.connectionProperties.server.isDirectTLS) {
-        SEL checkSel = NSSelectorFromString(@"check:");
-        if ([parsedStanza respondsToSelector:checkSel]) {
-            BOOL isFeatures = ((BOOL (*)(id, SEL, NSString*))objc_msgSend)(
-                parsedStanza, checkSel, @"/{http://etherx.jabber.org/streams}features");
-            if (isFeatures) {
-                wireSetStartTLSComplete(self, YES);
-            }
-        }
-    }
     wireOrigProcessInput(self, _cmd, parsedStanza, delayedReplay);
 }
 
