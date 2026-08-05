@@ -1,10 +1,12 @@
 #import "WireBootstrap.h"
+#import "MonalWireLog.h"
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <SAMKeychain/SAMKeychain.h>
 #import <monalxmpp/HelperTools.h>
 #import <monalxmpp/MLProcessLock.h>
 #import <monalxmpp/MLConstants.h>
+#import <monalxmpp/MLXMLNode.h>
 #import <monalxmpp/xmpp.h>
 #import <Network/Network.h>
 
@@ -102,11 +104,26 @@ static void wireSetStartTLSComplete(xmpp* account, BOOL value) {
 
 static void wireStartXmppStream(xmpp* self, SEL _cmd, BOOL withXMLOpening, BOOL withStartTLS, BOOL directWrite) {
     (void)withStartTLS;
-    (void)directWrite;
     // Plaintext interop: skip STARTTLS but treat stream features as post-TLS (xmpp.m ~3170).
     wireSetStartTLSComplete(self, YES);
-    // Keep Monal's directWrite pipelining so the stream header is sent before TCP open completes.
-    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, YES);
+    wireOrigStartXmppStream(self, _cmd, withXMLOpening, NO, directWrite);
+}
+
+static BOOL wireStripSasl2FromStreamFeatures(MLXMLNode* features) {
+    BOOL stripped = NO;
+    for (MLXMLNode* child in [features.children copy]) {
+        if ([child check:@"{urn:xmpp:sasl:2}authentication"]) {
+            [features removeChildNode:child];
+            stripped = YES;
+            continue;
+        }
+        NSString* xmlns = child.attributes[@"xmlns"];
+        if (xmlns.length && [xmlns isEqualToString:@"urn:xmpp:sasl:2"]) {
+            [features removeChildNode:child];
+            stripped = YES;
+        }
+    }
+    return stripped;
 }
 
 typedef void (*WireProcessInputIMP)(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayedReplay);
@@ -120,9 +137,12 @@ static void wireProcessInput(xmpp* self, SEL _cmd, id parsedStanza, BOOL delayed
                 parsedStanza, checkSel, @"/{http://etherx.jabber.org/streams}features");
             if (isFeatures) {
                 wireSetStartTLSComplete(self, YES);
-                if (self.accountState == kStateLoggedIn) {
-                    fprintf(stderr, "MonalWire: post-auth stream features received at state 4\n");
-                    fflush(stderr);
+                if (self.accountState < kStateLoggedIn) {
+                    if (wireStripSasl2FromStreamFeatures((MLXMLNode*)parsedStanza)) {
+                        MonalWireLog("stripped SASL2 from pre-auth features (force SASL1 bind flow)");
+                    }
+                } else if (self.accountState == kStateLoggedIn) {
+                    MonalWireLog("post-auth stream features received at state 4");
                 }
             }
         }
@@ -283,7 +303,7 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
     }
-    fprintf(stderr, "MonalWire: triggering legacy bind after SASL2 (no inlined bind2)\n");
+    fprintf(stderr, "MonalWire: triggering legacy bind fallback at state 4\n");
     fflush(stderr);
     MonalWireDispatchOnReceiveQueue(account, ^{
         // ejabberd may complete SASL2 without inlined BIND2; clear inline flags so legacy bind is allowed.
@@ -306,6 +326,7 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
     installed = YES;
 
     wireDataDir = dataDir;
+    MonalWireLogInstall(dataDir);
     [dataDir setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
     NSError* err = nil;
     [[NSFileManager defaultManager] createDirectoryAtURL:dataDir withIntermediateDirectories:YES attributes:nil error:&err];

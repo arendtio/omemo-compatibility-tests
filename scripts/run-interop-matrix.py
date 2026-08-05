@@ -195,10 +195,11 @@ def wait_native_wire_process(
 
 
 def dump_wire_log(data_dir: Path) -> None:
-    log = data_dir / "wire-popen.log"
-    if log.is_file():
-        print(f"--- wire log {log} ---", flush=True)
-        print(log.read_text(encoding="utf-8", errors="replace"), flush=True)
+    for name in ("wire-popen.log", "wire-debug.log"):
+        log = data_dir / name
+        if log.is_file():
+            print(f"--- wire log {log} ---", flush=True)
+            print(log.read_text(encoding="utf-8", errors="replace"), flush=True)
 
 
 def invoke_client(

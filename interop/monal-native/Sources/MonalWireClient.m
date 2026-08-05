@@ -188,8 +188,9 @@
         acc = [self account];
         int state = acc ? (int)acc.accountState : -99;
         if (state != lastLoggedState) {
-            fprintf(stderr, "MonalWire: connect state=%d\n", state);
-            fflush(stderr);
+            char buf[64];
+            snprintf(buf, sizeof(buf), "connect state=%d", state);
+            MonalWireLog(buf);
             if (state == kStateDisconnected) {
                 MonalWireLog("connect: disconnected (reconnecting?)");
             } else if (state == kStateLoggedOut) {
