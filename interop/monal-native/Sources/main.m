@@ -92,6 +92,12 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        if (![client waitForOmemoReadyWithTimeout:120 error:&err]) {
+            fprintf(stderr, "ERROR: omemo not ready: %s\n", err.localizedDescription.UTF8String);
+            fflush(stderr);
+            return 1;
+        }
+
         if ([mode isEqualToString:@"wait"]) {
             if (!peer) {
                 fprintf(stderr, "wait requires --peer (sender JID)\n");

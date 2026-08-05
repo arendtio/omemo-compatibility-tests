@@ -10,6 +10,7 @@
 #import <monalxmpp/MLOMEMO.h>
 #import <monalxmpp/MLXMLNode.h>
 #import <monalxmpp/xmpp.h>
+#import <objc/message.h>
 
 @interface MonalWireClient ()
 @property(nonatomic, copy) NSString* jid;
@@ -226,6 +227,108 @@
         return NO;
     }
     return YES;
+}
+
+static void wireQueryOmemoDevices(xmpp* acc, NSString* jid, BOOL subscribe) {
+    SEL sel = NSSelectorFromString(@"queryOMEMODevices:withSubscribe:");
+    if ([acc.omemo respondsToSelector:sel]) {
+        ((void (*)(id, SEL, NSString*, BOOL))objc_msgSend)(acc.omemo, sel, jid, subscribe);
+    }
+}
+
+static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
+    SEL processSel = NSSelectorFromString(@"processOMEMODevices:from:");
+    if ([acc.omemo respondsToSelector:processSel]) {
+        ((void (*)(id, SEL, NSSet*, NSString*))objc_msgSend)(acc.omemo, processSel, [NSSet set], ownJid);
+    }
+    SEL keysSel = NSSelectorFromString(@"generateNewKeysIfNeeded");
+    if ([acc.omemo respondsToSelector:keysSel]) {
+        ((BOOL (*)(id, SEL))objc_msgSend)(acc.omemo, keysSel);
+    }
+    SEL bundleSel = NSSelectorFromString(@"sendOMEMOBundle");
+    if ([acc.omemo respondsToSelector:bundleSel]) {
+        ((void (*)(id, SEL))objc_msgSend)(acc.omemo, bundleSel);
+    }
+    SEL publishSel = NSSelectorFromString(@"publishOwnDeviceList");
+    if ([acc.omemo respondsToSelector:publishSel]) {
+        ((void (*)(id, SEL))objc_msgSend)(acc.omemo, publishSel);
+    }
+}
+
+- (BOOL)ownDeviceListedOnOmemo:(xmpp*)acc {
+    if (!acc || !acc.omemo) {
+        return NO;
+    }
+    NSNumber* deviceId = [acc.omemo getDeviceId];
+    if (!deviceId) {
+        return NO;
+    }
+    NSSet* ownList = nil;
+    @try {
+        ownList = [acc.omemo valueForKey:@"ownDeviceList"];
+    } @catch (NSException* e) {
+        (void)e;
+        return NO;
+    }
+    return ownList != nil && [ownList containsObject:deviceId];
+}
+
+- (BOOL)waitForOmemoReadyWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
+    MonalWireLog("waitForOmemoReady: begin");
+    NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    BOOL fetchTriggered = NO;
+    BOOL forcePublishTriggered = NO;
+    NSDate* fetchStartedAt = nil;
+    int lastLogPhase = -1;
+    while ([deadline timeIntervalSinceNow] > 0) {
+        xmpp* acc = [self account];
+        if (!acc || !acc.omemo) {
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+            continue;
+        }
+        NSString* ownJid = acc.connectionProperties.identity.jid;
+        BOOL sessionReady = acc.accountState >= kStateCatchupDone;
+        BOOL omemoCatchup = acc.omemo.state.catchupDone;
+        BOOL listed = [self ownDeviceListedOnOmemo:acc];
+        BOOL bundlesIdle = acc.omemo.openBundleFetchCnt == 0;
+        int phase = (sessionReady ? 4 : 0) + (omemoCatchup ? 2 : 0) + (listed ? 1 : 0);
+        if (phase != lastLogPhase) {
+            char buf[96];
+            snprintf(buf, sizeof(buf), "waitForOmemoReady: session=%d omemoCatchup=%d listed=%d bundles=%lu",
+                     sessionReady, omemoCatchup, listed, acc.omemo.openBundleFetchCnt);
+            MonalWireLog(buf);
+            lastLogPhase = phase;
+        }
+        if (sessionReady && omemoCatchup && listed && bundlesIdle) {
+            MonalWireLog("waitForOmemoReady: ready");
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3.0]];
+            return YES;
+        }
+        if (sessionReady && omemoCatchup && !fetchTriggered) {
+            fetchTriggered = YES;
+            fetchStartedAt = [NSDate date];
+            MonalWireLog("waitForOmemoReady: fetching own devicelist");
+            wireQueryOmemoDevices(acc, ownJid, NO);
+        }
+        if (sessionReady && omemoCatchup && fetchTriggered && !listed && !forcePublishTriggered
+            && fetchStartedAt && [fetchStartedAt timeIntervalSinceNow] < -10.0) {
+            forcePublishTriggered = YES;
+            MonalWireLog("waitForOmemoReady: forcing OMEMO publish");
+            wireForceOmemoPublish(acc, ownJid);
+        }
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+    }
+    if (error) {
+        xmpp* acc = [self account];
+        *error = [NSError errorWithDomain:@"MonalWire" code:5 userInfo:@{
+            NSLocalizedDescriptionKey: [NSString stringWithFormat:
+                @"timeout waiting for OMEMO publish (listed=%d bundles=%lu state=%d)",
+                [self ownDeviceListedOnOmemo:acc],
+                acc ? acc.omemo.openBundleFetchCnt : 0UL,
+                acc ? (int)acc.accountState : -99],
+        }];
+    }
+    return NO;
 }
 
 - (BOOL)preparePeer:(NSString*)peerJid error:(NSError**)error {
