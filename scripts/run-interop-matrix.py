@@ -639,6 +639,13 @@ def reset_localhost_users() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run OMEMO client interop matrix")
     parser.add_argument("--pair", default="conversations-vs-siskin")
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        dest="scenarios",
+        metavar="NAME",
+        help="Run only these scenario(s); repeatable. Default: all scenarios for the pair.",
+    )
     parser.add_argument("--build", action="store_true", help="Build client runners first")
     parser.add_argument(
         "--native-conversations",
@@ -679,11 +686,19 @@ def main() -> int:
     if native_macos_wire_enabled() and (
         pair.get("native_left") or pair.get("native_right")
     ):
-        if not siskin_native_binary().exists():
+        needs_siskin = (
+            (pair.get("left") == "siskin_im" and pair.get("native_left"))
+            or (pair.get("right") == "siskin_im" and pair.get("native_right"))
+        )
+        needs_monal = (
+            (pair.get("left") == "monal" and pair.get("native_left"))
+            or (pair.get("right") == "monal" and pair.get("native_right"))
+        )
+        if needs_siskin and not siskin_native_binary().exists():
             rc = build_siskin_native()
             if rc != 0:
                 return rc
-        if not monal_native_binary().exists():
+        if needs_monal and not monal_native_binary().exists():
             rc = build_monal_native()
             if rc != 0:
                 return rc
@@ -699,7 +714,13 @@ def main() -> int:
         if rc != 0:
             return rc
 
-    for scenario in pair["scenarios"]:
+    scenarios = args.scenarios if args.scenarios else pair["scenarios"]
+    unknown = [s for s in scenarios if s not in pair["scenarios"]]
+    if unknown:
+        print(f"Unknown scenario(s) for pair {pair['id']}: {unknown}", file=sys.stderr)
+        return 1
+
+    for scenario in scenarios:
         print(f"\n=== Scenario: {scenario} ({pair['id']}) ===")
         handler = SCENARIO_HANDLERS.get(scenario)
         if handler is None:
