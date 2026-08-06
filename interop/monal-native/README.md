@@ -1,5 +1,7 @@
 # Monal native wire bridge (MLOMEMO / SignalProtocolC)
 
+CI: fast matrix via `.github/workflows/monal-wire-macos.yml` on `cursor/**` pushes.
+
 ## Status
 
 **Vendor-native wire on macOS.** Monal's OMEMO stack is Objective-C (`MLOMEMO.m`) inside the
