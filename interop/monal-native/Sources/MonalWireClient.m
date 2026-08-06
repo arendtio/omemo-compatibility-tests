@@ -24,7 +24,9 @@
 @property(nonatomic, copy) NSString* lastBody;
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
 @property(nonatomic, assign) BOOL legacyBindTriggered;
+@property(nonatomic, assign) BOOL reconnectNudged;
 @property(nonatomic, strong) NSDate* loggedInSince;
+@property(nonatomic, strong) NSDate* connectedSince;
 @end
 
 @implementation MonalWireClient
@@ -134,14 +136,28 @@
                                                name:kMonalNewMessageNotice
                                              object:nil];
 
-    for (int attempt = 1; attempt <= 3; attempt++) {
+    for (int attempt = 1; attempt <= 4; attempt++) {
         if (attempt > 1) {
             MonalWireLog("connect: retry after failure");
-            [self resetAccountForRetry];
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:8.0]];
+            if (attempt >= 3) {
+                [self resetAccountForRetry];
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:15.0]];
+                if (![self startAccountLogin]) {
+                    if (error) {
+                        *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
+                    }
+                    return NO;
+                }
+            } else {
+                xmpp* acc = [self account];
+                if (acc) {
+                    MonalWireLog("connect: soft retry reconnect");
+                    [acc reconnect:2.0];
+                }
+                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:5.0]];
+            }
             MonalWireEnsurePlaintextHooks();
-        }
-        if (![self startAccountLogin]) {
+        } else if (![self startAccountLogin]) {
             if (error) {
                 *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
             }
@@ -200,7 +216,9 @@
 - (BOOL)waitForSessionWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     self.smacksFallbackScheduled = NO;
     self.legacyBindTriggered = NO;
+    self.reconnectNudged = NO;
     self.loggedInSince = nil;
+    self.connectedSince = nil;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     NSDate* lastHeartbeat = [NSDate date];
     xmpp* acc = nil;
@@ -233,6 +251,18 @@
         }
         if (acc && acc.accountState < kStateHasStream) {
             MonalWireForcePlaintextStreamReady(acc);
+        }
+        if (acc && acc.accountState == kStateConnected) {
+            if (!self.connectedSince) {
+                self.connectedSince = [NSDate date];
+            } else if (!self.reconnectNudged && [self.connectedSince timeIntervalSinceNow] < -20.0) {
+                self.reconnectNudged = YES;
+                MonalWireLog("connect: nudging reconnect from state 2");
+                [acc reconnect:1.0];
+                self.connectedSince = nil;
+            }
+        } else {
+            self.connectedSince = nil;
         }
         [self triggerLegacyBindIfNeeded:acc];
         [self triggerSmacksFallbackIfNeeded:acc];
