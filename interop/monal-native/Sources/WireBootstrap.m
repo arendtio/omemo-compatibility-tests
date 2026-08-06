@@ -375,6 +375,8 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
     // Headless wire: skip device-id migration that reads keychain (Rust panic in simulator CLI).
     [[HelperTools defaultsDB] setBool:YES forKey:@"isSandboxAPNS"];
     [[HelperTools defaultsDB] setBool:NO forKey:@"udpLoggerEnabled"];
+    // Wire interop has no roster subscribe handshake; accept messages from matrix peers.
+    [[HelperTools defaultsDB] setBool:YES forKey:@"allowNonRosterContacts"];
     // Disable SASL2 inline bind2/smacks: ejabberd completes auth but not inlined bind; use post-auth features + legacy bind.
     [[HelperTools defaultsDB] setBool:YES forKey:@"preventLeaksBeforeAuth"];
     [[HelperTools defaultsDB] synchronize];

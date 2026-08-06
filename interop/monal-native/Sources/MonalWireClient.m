@@ -129,6 +129,10 @@
                                          selector:@selector(handleNewMessage:)
                                              name:kMonalNewMessageNotice
                                            object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector(handleNewMessage:)
+                                               name:kMonalNewMessageNotice
+                                             object:nil];
 
     for (int attempt = 1; attempt <= 3; attempt++) {
         if (attempt > 1) {
@@ -365,6 +369,8 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     }
     MLContact* contact = [MLContact createContactFromJid:peerJid andAccountID:self.accountID];
     [[MLXMPPManager sharedInstance] addContact:contact];
+    [[DataLayer sharedInstance] addContact:peerJid forAccount:self.accountID nickname:nil];
+    [[DataLayer sharedInstance] setSubscription:kSubBoth andAsk:@"" forContact:peerJid andAccount:self.accountID];
     if (acc.omemo) {
         [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:peerJid];
     }
@@ -403,6 +409,20 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     return YES;
 }
 
+- (void)noteBodyIfMatching:(NSString*)body expected:(NSString*)expected {
+    if (body.length && [body isEqualToString:expected]) {
+        self.lastBody = body;
+    }
+}
+
+- (NSString*)latestBodyFromDataLayerForPeer:(NSString*)peerJid {
+    if (!peerJid || !self.accountID) {
+        return nil;
+    }
+    MLMessage* msg = [[DataLayer sharedInstance] lastMessageForContact:peerJid forAccount:self.accountID];
+    return msg.messageText;
+}
+
 - (BOOL)awaitBody:(NSString*)expected timeout:(NSTimeInterval)timeout {
     MonalWireLog([[NSString stringWithFormat:@"awaitBody: expect=%@", expected] UTF8String]);
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
@@ -415,10 +435,21 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
             }
             lastPeerRefresh = [NSDate date];
         }
+        if (self.preparedPeerJid) {
+            NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
+            if (dbBody.length) {
+                MonalWireLog([[NSString stringWithFormat:@"awaitBody: db body=%@", dbBody] UTF8String]);
+                [self noteBodyIfMatching:dbBody expected:expected];
+            }
+        }
         if ([self.lastBody isEqualToString:expected]) {
             return YES;
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+    }
+    if (self.preparedPeerJid) {
+        NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
+        [self noteBodyIfMatching:dbBody expected:expected];
     }
     return [self.lastBody isEqualToString:expected];
 }
@@ -428,6 +459,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
         [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:YES];
     }
     [[MLNotificationQueue currentQueue] removeObserver:self];
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end
