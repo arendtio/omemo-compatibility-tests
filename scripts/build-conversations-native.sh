@@ -8,4 +8,5 @@ if [[ -z "$ANDROID_HOME" ]]; then
 fi
 cd "$ROOT/interop/android"
 ./gradlew :conv-native:conversationsNativeCryptoTest --no-daemon -q
-echo "Conversations vendor axolotl native tests passed"
+./gradlew :conv-native:conversationsCryptoWire -PwireMode=local_roundtrip --no-daemon -q
+echo "Conversations vendor axolotl native tests + wire prewarm passed"

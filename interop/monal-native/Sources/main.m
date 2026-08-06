@@ -134,7 +134,12 @@ int main(int argc, char* argv[]) {
                 fprintf(stderr, "wait requires --expect\n");
                 return 1;
             }
-            BOOL ok = [client awaitBody:expectBody timeout:120];
+            NSTimeInterval awaitTimeout = 300;
+            NSString* awaitEnv = [NSProcessInfo processInfo].environment[@"MONAL_WIRE_AWAIT_TIMEOUT"];
+            if (awaitEnv.length) {
+                awaitTimeout = [awaitEnv doubleValue];
+            }
+            BOOL ok = [client awaitBody:expectBody timeout:awaitTimeout];
             [client disconnect];
             if (ok) {
                 printf("OK\n");

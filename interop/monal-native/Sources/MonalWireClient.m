@@ -7,6 +7,7 @@
 #import <monalxmpp/MLContact.h>
 #import <monalxmpp/MLMessage.h>
 #import <monalxmpp/MLConstants.h>
+#import <monalxmpp/MLNotificationQueue.h>
 #import <monalxmpp/MLOMEMO.h>
 #import <monalxmpp/MLXMLNode.h>
 #import <monalxmpp/xmpp.h>
@@ -19,6 +20,7 @@
 @property(nonatomic, assign) int port;
 @property(nonatomic, strong) NSURL* dataDir;
 @property(nonatomic, strong) NSNumber* accountID;
+@property(nonatomic, copy) NSString* preparedPeerJid;
 @property(nonatomic, copy) NSString* lastBody;
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
 @property(nonatomic, assign) BOOL legacyBindTriggered;
@@ -123,10 +125,10 @@
     [HelperTools initSystem];
     MonalWireEnsurePlaintextHooks();
 
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(handleNewMessage:)
-                                                 name:kMonalNewMessageNotice
-                                               object:nil];
+    [[MLNotificationQueue currentQueue] addObserver:self
+                                         selector:@selector(handleNewMessage:)
+                                             name:kMonalNewMessageNotice
+                                           object:nil];
 
     for (int attempt = 1; attempt <= 3; attempt++) {
         if (attempt > 1) {
@@ -353,6 +355,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
 
 - (BOOL)preparePeer:(NSString*)peerJid error:(NSError**)error {
     MonalWireLog([[NSString stringWithFormat:@"preparePeer: %@", peerJid] UTF8String]);
+    self.preparedPeerJid = peerJid;
     xmpp* acc = [self account];
     if (!acc) {
         if (error) {
@@ -403,7 +406,15 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
 - (BOOL)awaitBody:(NSString*)expected timeout:(NSTimeInterval)timeout {
     MonalWireLog([[NSString stringWithFormat:@"awaitBody: expect=%@", expected] UTF8String]);
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    NSDate* lastPeerRefresh = [NSDate date];
     while ([deadline timeIntervalSinceNow] > 0) {
+        if (self.preparedPeerJid && [lastPeerRefresh timeIntervalSinceNow] < -10.0) {
+            xmpp* acc = [self account];
+            if (acc.omemo) {
+                [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:self.preparedPeerJid];
+            }
+            lastPeerRefresh = [NSDate date];
+        }
         if ([self.lastBody isEqualToString:expected]) {
             return YES;
         }
@@ -416,7 +427,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     if (self.accountID != nil) {
         [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:YES];
     }
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [[MLNotificationQueue currentQueue] removeObserver:self];
 }
 
 @end

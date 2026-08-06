@@ -202,6 +202,22 @@ def dump_wire_log(data_dir: Path) -> None:
             print(log.read_text(encoding="utf-8", errors="replace"), flush=True)
 
 
+def prewarm_conversations_native_wire() -> int:
+    """Compile Conversations vendor + Robolectric wire once so scenario sends stay fast."""
+    if not os.environ.get("ANDROID_HOME"):
+        return 0
+    d = ROOT / "tmp" / "wire-prewarm"
+    d.mkdir(parents=True, exist_ok=True)
+    print("prewarm: conversations native wire (local_roundtrip)", flush=True)
+    return run_native_wire(
+        "local_roundtrip",
+        "alice@localhost",
+        "alicepass",
+        d,
+        timeout=600,
+    )
+
+
 def invoke_client(
     client_id: str,
     matrix: dict,
@@ -219,7 +235,7 @@ def invoke_client(
     d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
     d.mkdir(parents=True, exist_ok=True)
     if use_native_wire(client_id, pair, as_matrix_left, native_conversations):
-        print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
+        print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}", flush=True)
         if client_id == "conversations":
             return run_native_wire(
                 mode, jid, password, d, peer=peer, send=send, expect=expect,
@@ -254,7 +270,7 @@ def spawn_client(
     d = data_dir or ROOT / "tmp" / "wire-data" / client_id / jid.split("@")[0]
     d.mkdir(parents=True, exist_ok=True)
     if use_native_wire(client_id, pair, as_matrix_left, native_conversations):
-        print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}")
+        print(f"NATIVE_WIRE client={client_id} mode={mode} jid={jid}", flush=True)
         if client_id == "conversations":
             return popen_native_wire(
                 mode, jid, password, d, peer=peer, send=send, expect=expect,
@@ -682,6 +698,12 @@ def main() -> int:
     if needs_conv_native and not os.environ.get("ANDROID_HOME"):
         print("ANDROID_HOME required for native Conversations wire", file=sys.stderr)
         return 1
+
+    if needs_conv_native:
+        rc = prewarm_conversations_native_wire()
+        if rc != 0:
+            print(f"prewarm: conversations native wire failed ({rc})", file=sys.stderr)
+            return rc
 
     if native_macos_wire_enabled() and (
         pair.get("native_left") or pair.get("native_right")
