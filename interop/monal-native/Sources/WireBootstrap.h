@@ -6,6 +6,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Redirect Monal DataLayer / HelperTools container to a wire data directory.
 void MonalWireBootstrapInstall(NSURL* dataDir);
 
+/// Delete and re-seed sworim.sqlite (used between connect retries).
+void MonalWireResetDataStore(NSURL* dataDir);
+
 /// Install MLStream TLS stubs once monalxmpp is fully loaded (safe to call repeatedly).
 void MonalWireEnsurePlaintextHooks(void);
 

@@ -318,6 +318,29 @@ void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     });
 }
 
+void MonalWireResetDataStore(NSURL* dataDir) {
+    if (!dataDir) {
+        return;
+    }
+    NSError* err = nil;
+    NSString* dbPath = [[dataDir URLByAppendingPathComponent:@"sworim.sqlite"] path];
+    [[NSFileManager defaultManager] removeItemAtPath:dbPath error:nil];
+    NSString* templatePath = [[NSBundle mainBundle] pathForResource:@"sworim" ofType:@"sqlite"];
+    if (!templatePath.length) {
+        NSString* interopRoot = [NSProcessInfo processInfo].environment[@"OMEMO_INTEROP_ROOT"];
+        if (interopRoot.length) {
+            templatePath = [interopRoot stringByAppendingPathComponent:@"vendor/monal/Monal/sworim.sqlite"];
+        }
+    }
+    if (templatePath.length && [[NSFileManager defaultManager] fileExistsAtPath:templatePath]) {
+        [[NSFileManager defaultManager] copyItemAtPath:templatePath toPath:dbPath error:&err];
+        if (err) {
+            fprintf(stderr, "MonalWire: reset data store failed: %s\n", err.localizedDescription.UTF8String);
+            fflush(stderr);
+        }
+    }
+}
+
 void MonalWireBootstrapInstall(NSURL* dataDir) {
     static BOOL installed = NO;
     if (installed) {
@@ -363,18 +386,11 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
 
     NSString* dbPath = [[dataDir URLByAppendingPathComponent:@"sworim.sqlite"] path];
     if (![[NSFileManager defaultManager] fileExistsAtPath:dbPath]) {
-        NSString* templatePath = [[NSBundle mainBundle] pathForResource:@"sworim" ofType:@"sqlite"];
-        if (!templatePath.length) {
-            NSString* interopRoot = [NSProcessInfo processInfo].environment[@"OMEMO_INTEROP_ROOT"];
-            if (interopRoot.length) {
-                templatePath = [interopRoot stringByAppendingPathComponent:@"vendor/monal/Monal/sworim.sqlite"];
-            }
-        }
-        if (templatePath.length && [[NSFileManager defaultManager] fileExistsAtPath:templatePath]) {
-            [[NSFileManager defaultManager] copyItemAtPath:templatePath toPath:dbPath error:&err];
-            if (err) {
-                @throw [NSException exceptionWithName:@"MonalWireBootstrap" reason:err.localizedDescription userInfo:nil];
-            }
+        MonalWireResetDataStore(dataDir);
+        if (![[NSFileManager defaultManager] fileExistsAtPath:dbPath]) {
+            @throw [NSException exceptionWithName:@"MonalWireBootstrap"
+                                           reason:@"failed to seed sworim.sqlite"
+                                         userInfo:nil];
         }
     }
 }

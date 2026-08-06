@@ -83,16 +83,7 @@
     MonalWireLog([[NSString stringWithFormat:@"incoming body=%@", message.messageText] UTF8String]);
 }
 
-- (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
-    MonalWireLog("connect: begin");
-    [HelperTools initSystem];
-    MonalWireEnsurePlaintextHooks();
-
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(handleNewMessage:)
-                                                 name:kMonalNewMessageNotice
-                                               object:nil];
-
+- (BOOL)startAccountLogin {
     MLXMPPManager* manager = [MLXMPPManager sharedInstance];
     NSString* portStr = [NSString stringWithFormat:@"%d", self.port];
     NSNumber* accountID = [manager login:self.jid
@@ -113,20 +104,42 @@
         }
     }
     if (accountID == nil) {
-        if (error) {
-            *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
-        }
         return NO;
     }
     self.accountID = accountID;
+    return YES;
+}
 
-    for (int attempt = 1; attempt <= 2; attempt++) {
+- (void)resetAccountForRetry {
+    if (self.accountID != nil) {
+        [[MLXMPPManager sharedInstance] removeAccountForAccountID:self.accountID];
+        self.accountID = nil;
+    }
+    MonalWireResetDataStore(self.dataDir);
+}
+
+- (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
+    MonalWireLog("connect: begin");
+    [HelperTools initSystem];
+    MonalWireEnsurePlaintextHooks();
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleNewMessage:)
+                                                 name:kMonalNewMessageNotice
+                                               object:nil];
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
         if (attempt > 1) {
             MonalWireLog("connect: retry after failure");
-            [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:NO];
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:5.0]];
+            [self resetAccountForRetry];
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:8.0]];
             MonalWireEnsurePlaintextHooks();
-            [[MLXMPPManager sharedInstance] addNewAccountToKeychainAndConnectWithPassword:self.password andAccountID:self.accountID];
+        }
+        if (![self startAccountLogin]) {
+            if (error) {
+                *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
+            }
+            return NO;
         }
         if ([self waitForSessionWithTimeout:timeout error:error]) {
             return YES;
@@ -183,6 +196,7 @@
     self.legacyBindTriggered = NO;
     self.loggedInSince = nil;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    NSDate* lastHeartbeat = [NSDate date];
     xmpp* acc = nil;
     int lastLoggedState = -100;
     while ([deadline timeIntervalSinceNow] > 0) {
@@ -204,6 +218,12 @@
                 MonalWireLog("connect: session init started");
             }
             lastLoggedState = state;
+        }
+        if ([lastHeartbeat timeIntervalSinceNow] < -30.0) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "connect: still waiting state=%d", state);
+            MonalWireLog(buf);
+            lastHeartbeat = [NSDate date];
         }
         if (acc && acc.accountState < kStateHasStream) {
             MonalWireForcePlaintextStreamReady(acc);
@@ -260,7 +280,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
         return NO;
     }
     NSNumber* deviceId = [acc.omemo getDeviceId];
-    if (!deviceId) {
+    if (deviceId == nil) {
         return NO;
     }
     NSSet* ownList = nil;
