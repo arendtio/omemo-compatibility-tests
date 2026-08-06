@@ -371,6 +371,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     [[MLXMPPManager sharedInstance] addContact:contact];
     [[DataLayer sharedInstance] addContact:peerJid forAccount:self.accountID nickname:nil];
     [[DataLayer sharedInstance] setSubscription:kSubBoth andAsk:@"" forContact:peerJid andAccount:self.accountID];
+    MonalWireLog([[NSString stringWithFormat:@"preparePeer: subscribed %@ both ways", peerJid] UTF8String]);
     if (acc.omemo) {
         [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:peerJid];
     }

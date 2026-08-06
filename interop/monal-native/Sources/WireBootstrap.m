@@ -377,6 +377,7 @@ void MonalWireBootstrapInstall(NSURL* dataDir) {
     [[HelperTools defaultsDB] setBool:NO forKey:@"udpLoggerEnabled"];
     // Wire interop has no roster subscribe handshake; accept messages from matrix peers.
     [[HelperTools defaultsDB] setBool:YES forKey:@"allowNonRosterContacts"];
+    [[HelperTools defaultsDB] setBool:YES forKey:@"OMEMODefaultOn"];
     // Disable SASL2 inline bind2/smacks: ejabberd completes auth but not inlined bind; use post-auth features + legacy bind.
     [[HelperTools defaultsDB] setBool:YES forKey:@"preventLeaksBeforeAuth"];
     [[HelperTools defaultsDB] synchronize];
