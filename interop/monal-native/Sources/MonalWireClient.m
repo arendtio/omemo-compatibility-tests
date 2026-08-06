@@ -111,7 +111,24 @@
         return NO;
     }
     self.accountID = accountID;
+    [self nudgeAccountConnectIfNeeded];
     return YES;
+}
+
+- (void)nudgeAccountConnectIfNeeded {
+    if (self.accountID == nil) {
+        return;
+    }
+    xmpp* acc = [self account];
+    if (!acc) {
+        MonalWireLog("connect: nudging connectAccount (no xmpp yet)");
+        [[MLXMPPManager sharedInstance] connectAccount:self.accountID];
+        return;
+    }
+    if (acc.accountState <= kStateLoggedOut) {
+        MonalWireLog("connect: nudging xmpp connect from logged out");
+        [acc connect];
+    }
 }
 
 - (void)resetAccountForRetry {
@@ -153,6 +170,8 @@
                 if (acc) {
                     MonalWireLog("connect: soft retry reconnect");
                     [acc reconnect:2.0];
+                } else {
+                    [self nudgeAccountConnectIfNeeded];
                 }
                 [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:5.0]];
             }
@@ -162,6 +181,8 @@
                 *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
             }
             return NO;
+        } else {
+            [self nudgeAccountConnectIfNeeded];
         }
         if ([self waitForSessionWithTimeout:timeout error:error]) {
             return YES;
