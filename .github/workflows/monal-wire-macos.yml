@@ -27,6 +27,7 @@ on:
 jobs:
   monal-wire:
     runs-on: macos-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
