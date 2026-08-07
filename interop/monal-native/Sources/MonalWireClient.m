@@ -487,18 +487,6 @@ static void wirePreparePeerSessions(xmpp* acc, NSString* peerJid) {
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.0]];
 }
 
-static void wireTrustAllKnownPeerDevices(xmpp* acc, NSString* peerJid) {
-    if (!acc || !acc.omemo || !peerJid.length) {
-        return;
-    }
-    for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:peerJid]) {
-        id address = wireMakeSignalAddress(peerJid, deviceId.unsignedIntValue);
-        if (address) {
-            [acc.omemo updateTrust:YES forAddress:address];
-        }
-    }
-}
-
 static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     SEL processSel = NSSelectorFromString(@"processOMEMODevices:from:");
     if ([acc.omemo respondsToSelector:processSel]) {
