@@ -23,6 +23,7 @@ import eu.siacs.conversations.xmpp.XmppConnection;
 import eu.siacs.conversations.xmpp.manager.PepManager;
 import eu.siacs.conversations.xmpp.manager.RosterManager;
 import im.conversations.android.xmpp.model.axolotl.Encrypted;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.cert.X509Certificate;
@@ -333,7 +334,7 @@ public final class NativeWireClient {
     }
 
     private void writeReadyMarker() throws Exception {
-        Files.writeString(dataDir.resolve("wire-ready"), "ok");
+        Files.write(dataDir.resolve("wire-ready"), "ok".getBytes(StandardCharsets.UTF_8));
     }
 
     public void disconnect() {
