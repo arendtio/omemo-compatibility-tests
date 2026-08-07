@@ -146,7 +146,7 @@ def wait_after_spawn_wait(
     data_dir: Path,
 ) -> int | None:
     """Boot a spawned wire client; return exit code on early failure."""
-    if mode != "wait":
+    if mode not in ("wait", "hold-send"):
         wait_boot(client_id, pair, native_conversations, as_matrix_left)
         return None
     if (
@@ -460,13 +460,20 @@ def scenario_unicode_body_roundtrip(
     reply = f"reply-unicode-🧪-{tag}"
 
     alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
-    rc = prewarm_omemo_publish(
-        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+
+    alice_proc = spawn_client(
+        left, matrix, pair, "hold-send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=hello,
+        data_dir=alice_data,
     )
-    if rc != 0:
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "hold-send", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
         return rc
 
-    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
@@ -477,23 +484,28 @@ def scenario_unicode_body_roundtrip(
         right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
     )
     if rc is not None:
+        alice_proc.kill()
         return rc
-    rc = invoke_client(
-        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
-        peer=bob_jid,
-        send=hello,
-        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
-    )
-    if rc != 0:
+
+    signal_hold_send(alice_data)
+    try:
+        alice_rc = alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
         bob_proc.kill()
-        return rc
+        return 1
+    if alice_rc != 0:
+        bob_proc.kill()
+        dump_wire_log(alice_data)
+        return alice_rc
+
     try:
         bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         bob_proc.kill()
         return 1
     if bob_rc != 0:
-        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
+        dump_wire_log(bob_data)
         return bob_rc
 
     rc = prewarm_omemo_publish(
@@ -550,6 +562,11 @@ SCENARIO_HANDLERS = {
 }
 
 
+def signal_hold_send(data_dir: Path) -> None:
+    """Tell a hold-send wire client to encrypt and send."""
+    (data_dir / "wire-send-now").write_text("go", encoding="utf-8")
+
+
 def scenario_alice_sends_bob_replies(
     left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
@@ -558,13 +575,20 @@ def scenario_alice_sends_bob_replies(
     tag = f"{left}-to-{right}"
 
     alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
-    rc = prewarm_omemo_publish(
-        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+
+    alice_proc = spawn_client(
+        left, matrix, pair, "hold-send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=f"hello-{tag}",
+        data_dir=alice_data,
     )
-    if rc != 0:
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "hold-send", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
         return rc
 
-    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
@@ -575,16 +599,20 @@ def scenario_alice_sends_bob_replies(
         right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
     )
     if rc is not None:
+        alice_proc.kill()
         return rc
-    rc = invoke_client(
-        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
-        peer=bob_jid,
-        send=f"hello-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
-    )
-    if rc != 0:
+
+    signal_hold_send(alice_data)
+    try:
+        alice_rc = alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
         bob_proc.kill()
-        return rc
+        return 1
+    if alice_rc != 0:
+        bob_proc.kill()
+        dump_wire_log(alice_data)
+        return alice_rc
 
     try:
         bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
@@ -592,7 +620,7 @@ def scenario_alice_sends_bob_replies(
         bob_proc.kill()
         return 1
     if bob_rc != 0:
-        dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
+        dump_wire_log(bob_data)
         return bob_rc
 
     rc = prewarm_omemo_publish(

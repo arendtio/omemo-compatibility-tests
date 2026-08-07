@@ -29,6 +29,7 @@ public final class ConversationsNativeWireMain {
                 System.out.println("VENDOR_XML=" + wire.toString());
                 System.out.println("RUNNER=conversations_android_crypto NATIVE=VENDOR_AXOLOTL");
                 return;
+            case "hold-send":
             case "publish":
             case "send":
             case "wait":

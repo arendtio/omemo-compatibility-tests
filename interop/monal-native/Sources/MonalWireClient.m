@@ -713,6 +713,9 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
             if (acc.omemo) {
                 wireQueryOmemoDevices(acc, self.preparedPeerJid, YES);
                 [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:self.preparedPeerJid];
+                for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:self.preparedPeerJid]) {
+                    wireFetchPeerBundle(acc, self.preparedPeerJid, deviceId);
+                }
                 wireTrustAllKnownPeerDevices(acc, self.preparedPeerJid);
             }
             lastPeerRefresh = [NSDate date];
@@ -720,6 +723,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
         if (self.preparedPeerJid) {
             NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
             if ([dbBody hasPrefix:@"Could not decrypt"]) {
+                MonalWireLog([[NSString stringWithFormat:@"awaitBody: decrypt error=%@", dbBody] UTF8String]);
                 xmpp* acc = [self account];
                 if (acc.omemo) {
                     for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:self.preparedPeerJid]) {

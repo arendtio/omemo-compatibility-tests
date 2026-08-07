@@ -337,6 +337,19 @@ public final class NativeWireClient {
         Files.write(dataDir.resolve("wire-ready"), "ok".getBytes(StandardCharsets.UTF_8));
     }
 
+    private void waitForSendSignal() throws Exception {
+        Path signal = dataDir.resolve("wire-send-now");
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(600);
+        while (System.nanoTime() < deadline) {
+            if (Files.isRegularFile(signal)) {
+                Files.deleteIfExists(signal);
+                return;
+            }
+            Thread.sleep(250);
+        }
+        throw new IllegalStateException("Timeout waiting for wire-send-now signal");
+    }
+
     /** Wait until our OMEMO device list + bundle are published to PEP. */
     public void waitForOwnOmemoPublish() throws InterruptedException {
         Jid own = Jid.of(jid.toString());
@@ -404,6 +417,24 @@ public final class NativeWireClient {
                     System.err.println("TIMEOUT expected=" + expectBody + " got=" + client.lastBody.get());
                     return 1;
                 }
+                System.out.println("OK");
+                return 0;
+            }
+
+            if ("hold-send".equals(mode)) {
+                if (peerStr == null || sendBody == null) {
+                    throw new IllegalArgumentException("hold-send requires peer and send");
+                }
+                EntityBareJid peer = JidCreate.entityBareFrom(peerStr);
+                client.ensureRosterPeer(peer);
+                client.waitForOwnOmemoPublish();
+                client.writeReadyMarker();
+                System.out.println("READY");
+                System.out.flush();
+                client.waitForSendSignal();
+                client.sendEncrypted(peer, sendBody);
+                Thread.sleep(1000);
+                client.disconnect();
                 System.out.println("OK");
                 return 0;
             }
