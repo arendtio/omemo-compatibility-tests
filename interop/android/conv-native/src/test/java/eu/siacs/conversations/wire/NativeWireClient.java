@@ -235,6 +235,15 @@ public final class NativeWireClient {
                 account, generator.generateAxolotlChat(message, encrypted));
     }
 
+    private void ensureRosterPeer(EntityBareJid peer) throws Exception {
+        preparedPeerJid = Jid.of(peer.toString());
+        Roster roster = Roster.getInstanceFor(connection);
+        if (!roster.contains(peer)) {
+            roster.createEntry(peer, peer.getLocalpart().toString(), null);
+            Thread.sleep(1000);
+        }
+    }
+
     private void preparePeer(EntityBareJid peer, Conversation conv) throws Exception {
         preparedPeerJid = Jid.of(peer.toString());
         Roster roster = Roster.getInstanceFor(connection);
@@ -275,43 +284,22 @@ public final class NativeWireClient {
         NativeTestHelper.trustPeerSessions(axolotl, account, peerJid);
     }
 
-    private void preparePeerForWait(EntityBareJid peer) throws Exception {
-        Conversation conv =
-                new Conversation(
-                        peer.getLocalpart().toString(),
-                        account,
-                        Jid.of(peer.toString()),
-                        Conversation.MODE_SINGLE);
-        wireService.databaseBackend.createConversation(conv);
-        Jid peerJid = Jid.of(peer.toString());
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
-        while (System.nanoTime() < deadline) {
-            try {
-                preparePeer(peer, conv);
-                return;
-            } catch (IllegalStateException e) {
-                if (!e.getMessage().contains("No OMEMO devices published")) {
-                    throw e;
-                }
-                axolotl.fetchDeviceIds(peerJid);
-                Thread.sleep(500);
-            }
-        }
-        preparePeer(peer, conv);
-    }
-
     private void refreshPreparedPeer() {
         if (preparedPeerJid == null) {
             return;
         }
         try {
             axolotl.fetchDeviceIds(preparedPeerJid);
+            if (axolotl.hasEmptyDeviceList(preparedPeerJid)) {
+                return;
+            }
             Conversation conv =
                     new Conversation(
                             preparedPeerJid.getLocal(),
                             account,
                             preparedPeerJid,
                             Conversation.MODE_SINGLE);
+            wireService.databaseBackend.createConversation(conv);
             axolotl.createSessionsIfNeeded(conv);
             NativeTestHelper.trustPeerSessions(axolotl, account, preparedPeerJid);
         } catch (Exception ignored) {
@@ -332,7 +320,7 @@ public final class NativeWireClient {
         long lastPeerRefresh = System.nanoTime();
         while (System.nanoTime() < deadline) {
             if (preparedPeerJid != null
-                    && System.nanoTime() - lastPeerRefresh > TimeUnit.SECONDS.toNanos(10)) {
+                    && System.nanoTime() - lastPeerRefresh > TimeUnit.SECONDS.toNanos(3)) {
                 refreshPreparedPeer();
                 lastPeerRefresh = System.nanoTime();
             }
@@ -417,8 +405,11 @@ public final class NativeWireClient {
                     throw new IllegalArgumentException("wait requires expect");
                 }
                 if (peerStr != null) {
-                    client.preparePeerForWait(JidCreate.entityBareFrom(peerStr));
+                    client.ensureRosterPeer(JidCreate.entityBareFrom(peerStr));
+                    client.refreshPreparedPeer();
                 }
+                System.out.println("READY");
+                System.out.flush();
                 boolean ok = client.awaitBody(expectBody, awaitTimeoutSeconds());
                 client.disconnect();
                 if (!ok) {
