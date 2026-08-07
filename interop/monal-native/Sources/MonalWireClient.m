@@ -668,7 +668,6 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
             NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
             if ([dbBody hasPrefix:@"Could not decrypt because you didn't trust the sender's device "]) {
                 unsigned int deviceId = 0;
-                NSScanner* scanner = [NSScanner scannerWithString:dbBody];
                 NSString* prefix = @"Could not decrypt because you didn't trust the sender's device ";
                 if ([dbBody hasPrefix:prefix]) {
                     NSString* tail = [dbBody substringFromIndex:prefix.length];
