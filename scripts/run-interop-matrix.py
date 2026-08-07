@@ -150,7 +150,7 @@ def wait_after_spawn_wait(
         wait_boot(client_id, pair, native_conversations, as_matrix_left)
         return None
     if (
-        client_id in ("siskin_im", "monal")
+        client_id in ("siskin_im", "monal", "conversations")
         and use_native_wire(client_id, pair, as_matrix_left, native_conversations)
     ):
         early = wait_native_wire_process(client_id, proc, data_dir)

@@ -408,6 +408,7 @@ public final class NativeWireClient {
                     client.ensureRosterPeer(JidCreate.entityBareFrom(peerStr));
                     client.refreshPreparedPeer();
                 }
+                Files.writeString(client.dataDir.resolve("wire-ready"), "ok");
                 System.out.println("READY");
                 System.out.flush();
                 boolean ok = client.awaitBody(expectBody, awaitTimeoutSeconds());
