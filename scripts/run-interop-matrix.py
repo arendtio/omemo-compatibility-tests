@@ -516,11 +516,12 @@ def scenario_unicode_body_roundtrip(
     )
     if rc is not None:
         return rc
+    time.sleep(15)
     rc = invoke_client(
         right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=reply,
-        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+        data_dir=bob_data,
     )
     if rc != 0:
         alice_proc.kill()
