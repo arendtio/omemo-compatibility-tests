@@ -84,6 +84,8 @@ jobs:
         env:
           OMEMO_XMPP_SECURITY: disabled
           OMEMO_NATIVE_MACOS: "1"
+          MONAL_WIRE_AWAIT_TIMEOUT: "600"
+          CONVERSATIONS_WIRE_AWAIT_TIMEOUT: "600"
 
       - name: Stop ejabberd
         if: always()

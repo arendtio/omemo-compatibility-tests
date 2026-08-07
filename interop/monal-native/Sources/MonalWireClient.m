@@ -451,6 +451,42 @@ static void wireTrustPeerDeviceId(xmpp* acc, NSString* peerJid, uint32_t deviceI
     }
 }
 
+static void wireRebuildPeerSession(xmpp* acc, NSString* peerJid, NSNumber* deviceId) {
+    SEL sel = NSSelectorFromString(@"rebuildSessionWithJid:forRid:");
+    if ([acc.omemo respondsToSelector:sel]) {
+        ((void (*)(id, SEL, NSString*, NSNumber*))objc_msgSend)(acc.omemo, sel, peerJid, deviceId);
+    }
+}
+
+static void wireSendKeyTransportToPeer(xmpp* acc, NSString* peerJid) {
+    if (!acc || !acc.omemo || !peerJid.length) {
+        return;
+    }
+    NSSet<NSNumber*>* devices = [acc.omemo knownDevicesForAddressName:peerJid];
+    if (devices.count == 0) {
+        return;
+    }
+    SEL sel = NSSelectorFromString(@"sendKeyTransportElement:forRids:");
+    if ([acc.omemo respondsToSelector:sel]) {
+        ((void (*)(id, SEL, NSString*, NSSet*))objc_msgSend)(acc.omemo, sel, peerJid, devices);
+    }
+}
+
+static void wirePreparePeerSessions(xmpp* acc, NSString* peerJid) {
+    if (!acc || !acc.omemo || !peerJid.length) {
+        return;
+    }
+    wireQueryOmemoDevices(acc, peerJid, YES);
+    [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:peerJid];
+    for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:peerJid]) {
+        wireFetchPeerBundle(acc, peerJid, deviceId);
+        wireTrustPeerDeviceId(acc, peerJid, deviceId.unsignedIntValue);
+        wireRebuildPeerSession(acc, peerJid, deviceId);
+    }
+    wireSendKeyTransportToPeer(acc, peerJid);
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.0]];
+}
+
 static void wireTrustAllKnownPeerDevices(xmpp* acc, NSString* peerJid) {
     if (!acc || !acc.omemo || !peerJid.length) {
         return;
@@ -595,7 +631,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     BOOL peerDevicesReady = NO;
     while ([deadline timeIntervalSinceNow] > 0) {
         if (wirePeerOmemoDevicesReady(acc, peerJid)) {
-            wireTrustAllKnownPeerDevices(acc, peerJid);
+            wirePreparePeerSessions(acc, peerJid);
             peerDevicesReady = YES;
             MonalWireLog([[NSString stringWithFormat:@"preparePeer: trusted %lu OMEMO device(s) for %@",
                            (unsigned long)[acc.omemo knownDevicesForAddressName:peerJid].count,
@@ -653,7 +689,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
             lastKnown = known;
         }
         if (wirePeerOmemoDevicesReady(acc, peerJid)) {
-            wireTrustAllKnownPeerDevices(acc, peerJid);
+            wirePreparePeerSessions(acc, peerJid);
             MonalWireLog([[NSString stringWithFormat:@"waitForPeerOmemoReady: ready (%lu device(s))",
                            (unsigned long)known] UTF8String]);
             return YES;
@@ -711,12 +747,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
         if (self.preparedPeerJid && [lastPeerRefresh timeIntervalSinceNow] < -2.0) {
             xmpp* acc = [self account];
             if (acc.omemo) {
-                wireQueryOmemoDevices(acc, self.preparedPeerJid, YES);
-                [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:self.preparedPeerJid];
-                for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:self.preparedPeerJid]) {
-                    wireFetchPeerBundle(acc, self.preparedPeerJid, deviceId);
-                }
-                wireTrustAllKnownPeerDevices(acc, self.preparedPeerJid);
+                wirePreparePeerSessions(acc, self.preparedPeerJid);
             }
             lastPeerRefresh = [NSDate date];
         }
@@ -726,10 +757,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
                 MonalWireLog([[NSString stringWithFormat:@"awaitBody: decrypt error=%@", dbBody] UTF8String]);
                 xmpp* acc = [self account];
                 if (acc.omemo) {
-                    for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:self.preparedPeerJid]) {
-                        wireFetchPeerBundle(acc, self.preparedPeerJid, deviceId);
-                        wireTrustPeerDeviceId(acc, self.preparedPeerJid, deviceId.unsignedIntValue);
-                    }
+                    wirePreparePeerSessions(acc, self.preparedPeerJid);
                 }
             }
             if ([dbBody hasPrefix:@"Could not decrypt because you didn't trust the sender's device "]) {
@@ -744,6 +772,8 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
                     if (acc.omemo) {
                         wireFetchPeerBundle(acc, self.preparedPeerJid, @(deviceId));
                         wireTrustPeerDeviceId(acc, self.preparedPeerJid, deviceId);
+                        wireRebuildPeerSession(acc, self.preparedPeerJid, @(deviceId));
+                        wireSendKeyTransportToPeer(acc, self.preparedPeerJid);
                     }
                 }
             }
