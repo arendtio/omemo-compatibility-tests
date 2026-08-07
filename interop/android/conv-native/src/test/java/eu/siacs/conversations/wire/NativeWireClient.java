@@ -398,6 +398,8 @@ public final class NativeWireClient {
                 if (peerStr == null || sendBody == null) {
                     throw new IllegalArgumentException("send requires peer and send");
                 }
+                // Let our PEP device list + bundle reach the peer receiver before encrypting.
+                Thread.sleep(15000);
                 client.sendEncrypted(JidCreate.entityBareFrom(peerStr), sendBody);
                 Thread.sleep(1000);
                 client.disconnect();

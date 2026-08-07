@@ -437,6 +437,20 @@ static BOOL wirePeerOmemoDevicesReady(xmpp* acc, NSString* peerJid) {
     return YES;
 }
 
+static void wireFetchPeerBundle(xmpp* acc, NSString* jid, NSNumber* deviceId) {
+    SEL sel = NSSelectorFromString(@"queryOMEMOBundleFrom:andDevice:");
+    if ([acc.omemo respondsToSelector:sel]) {
+        ((void (*)(id, SEL, NSString*, NSNumber*))objc_msgSend)(acc.omemo, sel, jid, deviceId);
+    }
+}
+
+static void wireTrustPeerDeviceId(xmpp* acc, NSString* peerJid, uint32_t deviceId) {
+    id address = wireMakeSignalAddress(peerJid, deviceId);
+    if (address) {
+        [acc.omemo updateTrust:YES forAddress:address];
+    }
+}
+
 static void wireTrustAllKnownPeerDevices(xmpp* acc, NSString* peerJid) {
     if (!acc || !acc.omemo || !peerJid.length) {
         return;
@@ -641,7 +655,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     NSDate* lastPeerRefresh = [NSDate date];
     while ([deadline timeIntervalSinceNow] > 0) {
-        if (self.preparedPeerJid && [lastPeerRefresh timeIntervalSinceNow] < -5.0) {
+        if (self.preparedPeerJid && [lastPeerRefresh timeIntervalSinceNow] < -2.0) {
             xmpp* acc = [self account];
             if (acc.omemo) {
                 wireQueryOmemoDevices(acc, self.preparedPeerJid, YES);
@@ -649,6 +663,21 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
                 wireTrustAllKnownPeerDevices(acc, self.preparedPeerJid);
             }
             lastPeerRefresh = [NSDate date];
+        }
+        if (self.preparedPeerJid) {
+            NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
+            if ([dbBody hasPrefix:@"Could not decrypt because you didn't trust the sender's device "]) {
+                unsigned int deviceId = 0;
+                NSScanner* scanner = [NSScanner scannerWithString:dbBody];
+                [scanner scanString:@"Could not decrypt because you didn't trust the sender's device " intoString:NULL];
+                if ([scanner scanUnsignedInt:&deviceId]) {
+                    xmpp* acc = [self account];
+                    if (acc.omemo) {
+                        wireFetchPeerBundle(acc, self.preparedPeerJid, @(deviceId));
+                        wireTrustPeerDeviceId(acc, self.preparedPeerJid, deviceId);
+                    }
+                }
+            }
         }
         if (self.preparedPeerJid) {
             NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
