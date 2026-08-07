@@ -577,7 +577,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
     }
-    deadline = [NSDate dateWithTimeIntervalSinceNow:90];
+    deadline = [NSDate dateWithTimeIntervalSinceNow:15];
     BOOL peerDevicesReady = NO;
     while ([deadline timeIntervalSinceNow] > 0) {
         if (wirePeerOmemoDevicesReady(acc, peerJid)) {
