@@ -641,10 +641,12 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     NSDate* lastPeerRefresh = [NSDate date];
     while ([deadline timeIntervalSinceNow] > 0) {
-        if (self.preparedPeerJid && [lastPeerRefresh timeIntervalSinceNow] < -10.0) {
+        if (self.preparedPeerJid && [lastPeerRefresh timeIntervalSinceNow] < -5.0) {
             xmpp* acc = [self account];
             if (acc.omemo) {
+                wireQueryOmemoDevices(acc, self.preparedPeerJid, YES);
                 [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:self.preparedPeerJid];
+                wireTrustAllKnownPeerDevices(acc, self.preparedPeerJid);
             }
             lastPeerRefresh = [NSDate date];
         }
