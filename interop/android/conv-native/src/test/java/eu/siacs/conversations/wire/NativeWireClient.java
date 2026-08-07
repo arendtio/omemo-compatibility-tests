@@ -245,6 +245,29 @@ public final class NativeWireClient {
         }
     }
 
+    private void waitForPeerOmemoReady(EntityBareJid peer, long timeoutSeconds) throws Exception {
+        Jid peerJid = Jid.of(peer.toString());
+        Conversation conv =
+                new Conversation(
+                        peer.getLocalpart().toString(), account, peerJid, Conversation.MODE_SINGLE);
+        wireService.databaseBackend.createConversation(conv);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (System.nanoTime() < deadline) {
+            axolotl.fetchDeviceIds(peerJid);
+            if (!axolotl.hasPendingKeyFetches(List.of(peerJid))
+                    && !axolotl.hasEmptyDeviceList(peerJid)
+                    && !axolotl.isPepBroken()) {
+                axolotl.createSessionsIfNeeded(conv);
+                if (!axolotl.hasPendingKeyFetches(List.of(peerJid))) {
+                    NativeTestHelper.trustPeerSessions(axolotl, account, peerJid);
+                    return;
+                }
+            }
+            Thread.sleep(500);
+        }
+        throw new IllegalStateException("Timeout waiting for peer OMEMO ready: " + peer);
+    }
+
     private void preparePeer(EntityBareJid peer, Conversation conv) throws Exception {
         preparedPeerJid = Jid.of(peer.toString());
         Roster roster = Roster.getInstanceFor(connection);
@@ -464,7 +487,13 @@ public final class NativeWireClient {
                     throw new IllegalArgumentException("wait requires expect");
                 }
                 if (peerStr != null) {
-                    client.ensureRosterPeer(JidCreate.entityBareFrom(peerStr));
+                    EntityBareJid peer = JidCreate.entityBareFrom(peerStr);
+                    client.ensureRosterPeer(peer);
+                    try {
+                        client.waitForPeerOmemoReady(peer, 120);
+                    } catch (IllegalStateException e) {
+                        System.err.println("WARN: " + e.getMessage());
+                    }
                     client.refreshPreparedPeer();
                 }
                 client.writeReadyMarker();

@@ -434,6 +434,7 @@ def scenario_bob_sends_alice_replies(
     )
     if rc is not None:
         return rc
+    time.sleep(15)
     rc = invoke_client(
         left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -621,11 +622,12 @@ def scenario_alice_sends_bob_replies(
     )
     if rc is not None:
         return rc
+    time.sleep(15)
     rc = invoke_client(
         right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
         send=f"reply-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
+        data_dir=bob_data,
     )
     if rc != 0:
         alice_proc.kill()
