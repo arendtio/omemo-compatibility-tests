@@ -24,11 +24,10 @@
 @property(nonatomic, copy) NSString* lastBody;
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
 @property(nonatomic, assign) BOOL legacyBindTriggered;
-@property(nonatomic, assign) BOOL reconnectNudged;
-@property(nonatomic, assign) BOOL streamStartNudged;
 @property(nonatomic, assign) int streamStartNudgeCount;
 @property(nonatomic, strong) NSDate* loggedInSince;
 @property(nonatomic, strong) NSDate* connectedSince;
+@property(nonatomic, strong) NSDate* hasStreamSince;
 @end
 
 @implementation MonalWireClient
@@ -156,6 +155,7 @@
     MonalWireLog("connect: cycling disconnect/connect");
     [acc disconnect:NO];
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3.0]];
+    MonalWireClearStreamFeatureCache(acc);
     MonalWireEnsurePlaintextHooks();
     [acc connect];
 }
@@ -166,6 +166,7 @@
     }
     MonalWireLog("connect: nudging session progress (bind/smacks)");
     MonalWireEnsurePlaintextHooks();
+    MonalWireClearStreamFeatureCache(acc);
     [self triggerLegacyBindIfNeeded:acc];
     [self triggerSmacksFallbackIfNeeded:acc];
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:15.0]];
@@ -237,7 +238,7 @@
     NSDate* overallDeadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     int recoveryPhase = 0;
     while ([overallDeadline timeIntervalSinceNow] > 0) {
-        NSTimeInterval slice = MIN(75.0, [overallDeadline timeIntervalSinceNow]);
+        NSTimeInterval slice = MIN(90.0, [overallDeadline timeIntervalSinceNow]);
         if (slice <= 0) {
             break;
         }
@@ -311,8 +312,9 @@
 - (BOOL)waitForSessionWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     self.smacksFallbackScheduled = NO;
     self.legacyBindTriggered = NO;
-    self.reconnectNudged = NO;
-    self.streamStartNudged = NO;
+    self.loggedInSince = nil;
+    self.connectedSince = nil;
+    self.hasStreamSince = nil;
     self.streamStartNudgeCount = 0;
     self.loggedInSince = nil;
     self.connectedSince = nil;
@@ -360,6 +362,17 @@
         } else {
             self.connectedSince = nil;
             self.streamStartNudgeCount = 0;
+        }
+        if (acc && acc.accountState >= kStateHasStream && acc.accountState < kStateInitStarted) {
+            if (!self.hasStreamSince) {
+                self.hasStreamSince = [NSDate date];
+            } else if ([self.hasStreamSince timeIntervalSinceNow] < -15.0) {
+                MonalWireLog("connect: nudging mid-auth progress");
+                [self nudgeSessionProgress:acc];
+                self.hasStreamSince = [NSDate date];
+            }
+        } else {
+            self.hasStreamSince = nil;
         }
         if (acc && (acc.accountState == kStateDisconnected || acc.accountState == kStateLoggedOut)) {
             [self nudgeAccountConnectIfNeeded];

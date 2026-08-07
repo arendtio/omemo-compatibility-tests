@@ -24,4 +24,7 @@ void MonalWireDispatchOnReceiveQueue(xmpp* account, void (^block)(void));
 /// Re-send stream open when stuck at kStateConnected (TCP up, no features yet).
 void MonalWireNudgeStreamStart(xmpp* account);
 
+/// Clear pipelined/cached stream features so auth is re-evaluated after reconnect.
+void MonalWireClearStreamFeatureCache(xmpp* account);
+
 NS_ASSUME_NONNULL_END

@@ -314,6 +314,18 @@ void MonalWireNudgeStreamStart(xmpp* account) {
     });
 }
 
+void MonalWireClearStreamFeatureCache(xmpp* account) {
+    if (!account) {
+        return;
+    }
+    @try {
+        [account setValue:nil forKey:@"cachedStreamFeaturesBeforeAuth"];
+        [account setValue:nil forKey:@"cachedStreamFeaturesAfterAuth"];
+    } @catch (NSException* e) {
+        (void)e;
+    }
+}
+
 void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;

@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
         fflush(stdout);
 
         NSError* err = nil;
-        if (![client connectWithTimeout:300 error:&err]) {
+        if (![client connectWithTimeout:420 error:&err]) {
             fprintf(stderr, "ERROR: connect failed: %s\n", err.localizedDescription.UTF8String);
             fflush(stderr);
             return 1;
