@@ -20,6 +20,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error;
 - (BOOL)waitForOmemoReadyWithTimeout:(NSTimeInterval)timeout error:(NSError**)error;
 - (BOOL)preparePeer:(NSString*)peerJid error:(NSError**)error;
+- (BOOL)waitForPeerOmemoReadyWithTimeout:(NSTimeInterval)timeout error:(NSError**)error;
 - (BOOL)sendEncrypted:(NSString*)peerJid body:(NSString*)body error:(NSError**)error;
 - (BOOL)awaitBody:(NSString*)expected timeout:(NSTimeInterval)timeout;
 - (void)disconnect;

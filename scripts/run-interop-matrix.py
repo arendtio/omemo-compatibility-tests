@@ -202,6 +202,31 @@ def dump_wire_log(data_dir: Path) -> None:
             print(log.read_text(encoding="utf-8", errors="replace"), flush=True)
 
 
+def prewarm_omemo_publish(
+    client_id: str,
+    matrix: dict,
+    pair: dict,
+    jid: str,
+    password: str,
+    native_conversations: bool,
+    as_matrix_left: bool,
+    data_dir: Path,
+) -> int:
+    """Connect briefly so PEP device list is on the server before the peer waits."""
+    print(f"prewarm: {client_id} OMEMO publish for {jid}", flush=True)
+    return invoke_client(
+        client_id,
+        matrix,
+        pair,
+        "publish",
+        jid,
+        password,
+        native_conversations,
+        as_matrix_left,
+        data_dir=data_dir,
+    )
+
+
 def prewarm_conversations_native_wire() -> int:
     """Compile Conversations vendor + Robolectric wire once so scenario sends stay fast."""
     if not os.environ.get("ANDROID_HOME"):
@@ -354,6 +379,13 @@ def scenario_bob_sends_alice_replies(
     bob_jid = "bob@localhost"
     tag = f"{right}-to-{left}"
 
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+    rc = prewarm_omemo_publish(
+        right, matrix, pair, bob_jid, "bobpass", native_conversations, False, bob_data,
+    )
+    if rc != 0:
+        return rc
+
     alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
@@ -385,7 +417,12 @@ def scenario_bob_sends_alice_replies(
     if alice_rc != 0:
         return alice_rc
 
-    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+    rc = prewarm_omemo_publish(
+        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    )
+    if rc != 0:
+        return rc
+
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
         peer=alice_jid,
@@ -422,6 +459,13 @@ def scenario_unicode_body_roundtrip(
     hello = f"hello-unicode-🧪-{tag}"
     reply = f"reply-unicode-🧪-{tag}"
 
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    rc = prewarm_omemo_publish(
+        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    )
+    if rc != 0:
+        return rc
+
     bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
@@ -452,7 +496,12 @@ def scenario_unicode_body_roundtrip(
         dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
         return bob_rc
 
-    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    rc = prewarm_omemo_publish(
+        right, matrix, pair, bob_jid, "bobpass", native_conversations, False, bob_data,
+    )
+    if rc != 0:
+        return rc
+
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -508,6 +557,13 @@ def scenario_alice_sends_bob_replies(
     bob_jid = "bob@localhost"
     tag = f"{left}-to-{right}"
 
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    rc = prewarm_omemo_publish(
+        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    )
+    if rc != 0:
+        return rc
+
     bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
     bob_proc = spawn_client(
         right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
@@ -539,7 +595,12 @@ def scenario_alice_sends_bob_replies(
         dump_wire_log(ROOT / "tmp" / "wire-data" / right / "bob")
         return bob_rc
 
-    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    rc = prewarm_omemo_publish(
+        right, matrix, pair, bob_jid, "bobpass", native_conversations, False, bob_data,
+    )
+    if rc != 0:
+        return rc
+
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,

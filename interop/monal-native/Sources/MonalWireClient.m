@@ -620,6 +620,59 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     return YES;
 }
 
+- (BOOL)waitForPeerOmemoReadyWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
+    if (!self.preparedPeerJid.length) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"MonalWire" code:6 userInfo:@{
+                NSLocalizedDescriptionKey: @"waitForPeerOmemoReady requires preparedPeerJid",
+            }];
+        }
+        return NO;
+    }
+    NSString* peerJid = self.preparedPeerJid;
+    MonalWireLog([[NSString stringWithFormat:@"waitForPeerOmemoReady: %@", peerJid] UTF8String]);
+    NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    NSUInteger lastKnown = 0;
+    while ([deadline timeIntervalSinceNow] > 0) {
+        xmpp* acc = [self account];
+        if (acc.omemo) {
+            wireQueryOmemoDevices(acc, peerJid, YES);
+            [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:peerJid];
+        }
+        NSDate* bundleDeadline = [NSDate dateWithTimeIntervalSinceNow:5];
+        while ([bundleDeadline timeIntervalSinceNow] > 0) {
+            if (!acc.omemo || acc.omemo.openBundleFetchCnt == 0) {
+                break;
+            }
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+        }
+        NSUInteger known = acc.omemo ? [acc.omemo knownDevicesForAddressName:peerJid].count : 0;
+        if (known != lastKnown) {
+            MonalWireLog([[NSString stringWithFormat:@"waitForPeerOmemoReady: known=%lu for %@",
+                           (unsigned long)known, peerJid] UTF8String]);
+            lastKnown = known;
+        }
+        if (wirePeerOmemoDevicesReady(acc, peerJid)) {
+            wireTrustAllKnownPeerDevices(acc, peerJid);
+            MonalWireLog([[NSString stringWithFormat:@"waitForPeerOmemoReady: ready (%lu device(s))",
+                           (unsigned long)known] UTF8String]);
+            return YES;
+        }
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+    }
+    xmpp* acc = [self account];
+    NSUInteger known = acc.omemo ? [acc.omemo knownDevicesForAddressName:peerJid].count : 0;
+    MonalWireLog([[NSString stringWithFormat:@"waitForPeerOmemoReady: timeout (known=%lu)",
+                   (unsigned long)known] UTF8String]);
+    if (error) {
+        *error = [NSError errorWithDomain:@"MonalWire" code:7 userInfo:@{
+            NSLocalizedDescriptionKey: [NSString stringWithFormat:
+                @"timeout waiting for peer OMEMO devices for %@ (known=%lu)", peerJid, (unsigned long)known],
+        }];
+    }
+    return NO;
+}
+
 - (BOOL)sendEncrypted:(NSString*)peerJid body:(NSString*)body error:(NSError**)error {
     MonalWireLog([[NSString stringWithFormat:@"sendEncrypted: peer=%@ body=%@", peerJid, body] UTF8String]);
     if (![self preparePeer:peerJid error:error]) {
@@ -666,6 +719,15 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
         }
         if (self.preparedPeerJid) {
             NSString* dbBody = [self latestBodyFromDataLayerForPeer:self.preparedPeerJid];
+            if ([dbBody hasPrefix:@"Could not decrypt"]) {
+                xmpp* acc = [self account];
+                if (acc.omemo) {
+                    for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:self.preparedPeerJid]) {
+                        wireFetchPeerBundle(acc, self.preparedPeerJid, deviceId);
+                        wireTrustPeerDeviceId(acc, self.preparedPeerJid, deviceId.unsignedIntValue);
+                    }
+                }
+            }
             if ([dbBody hasPrefix:@"Could not decrypt because you didn't trust the sender's device "]) {
                 unsigned int deviceId = 0;
                 NSString* prefix = @"Could not decrypt because you didn't trust the sender's device ";

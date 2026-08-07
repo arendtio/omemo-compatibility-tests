@@ -337,6 +337,20 @@ public final class NativeWireClient {
         Files.write(dataDir.resolve("wire-ready"), "ok".getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Wait until our OMEMO device list + bundle are published to PEP. */
+    public void waitForOwnOmemoPublish() throws InterruptedException {
+        Jid own = Jid.of(jid.toString());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(90);
+        while (System.nanoTime() < deadline) {
+            if (!axolotl.hasPendingKeyFetches(List.of(own)) && !axolotl.isPepBroken()) {
+                break;
+            }
+            Thread.sleep(500);
+        }
+        // Let PEP propagate to subscribers before disconnecting.
+        Thread.sleep(8000);
+    }
+
     public void disconnect() {
         if (connection != null && connection.isConnected()) {
             connection.disconnect();
@@ -394,12 +408,19 @@ public final class NativeWireClient {
                 return 0;
             }
 
+            if ("publish".equals(mode)) {
+                client.waitForOwnOmemoPublish();
+                client.disconnect();
+                System.out.println("OK");
+                return 0;
+            }
+
             if ("send".equals(mode)) {
                 if (peerStr == null || sendBody == null) {
                     throw new IllegalArgumentException("send requires peer and send");
                 }
                 // Let our PEP device list + bundle reach the peer receiver before encrypting.
-                Thread.sleep(15000);
+                Thread.sleep(8000);
                 client.sendEncrypted(JidCreate.entityBareFrom(peerStr), sendBody);
                 Thread.sleep(1000);
                 client.disconnect();

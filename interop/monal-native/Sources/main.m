@@ -3,7 +3,7 @@
 #import "WireBootstrap.h"
 
 static void usage(void) {
-    fprintf(stderr, "Usage: MonalWire --mode <send|wait> [--peer JID] [--send BODY] [--expect BODY] -- --jid JID --password PASS [--host HOST] [--port PORT] [--data-dir PATH]\n");
+    fprintf(stderr, "Usage: MonalWire --mode <publish|send|wait> [--peer JID] [--send BODY] [--expect BODY] -- --jid JID --password PASS [--host HOST] [--port PORT] [--data-dir PATH]\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -98,6 +98,12 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        if ([mode isEqualToString:@"publish"]) {
+            [client disconnect];
+            printf("OK\n");
+            return 0;
+        }
+
         if ([mode isEqualToString:@"wait"]) {
             if (!peer) {
                 fprintf(stderr, "wait requires --peer (sender JID)\n");
@@ -106,6 +112,9 @@ int main(int argc, char* argv[]) {
             if (![client preparePeer:peer error:&err]) {
                 fprintf(stderr, "ERROR: preparePeer failed: %s\n", err.localizedDescription.UTF8String);
                 return 1;
+            }
+            if (![client waitForPeerOmemoReadyWithTimeout:120 error:&err]) {
+                fprintf(stderr, "WARN: peer OMEMO not ready: %s\n", err.localizedDescription.UTF8String);
             }
         }
 
