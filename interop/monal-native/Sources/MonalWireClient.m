@@ -669,8 +669,12 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
             if ([dbBody hasPrefix:@"Could not decrypt because you didn't trust the sender's device "]) {
                 unsigned int deviceId = 0;
                 NSScanner* scanner = [NSScanner scannerWithString:dbBody];
-                [scanner scanString:@"Could not decrypt because you didn't trust the sender's device " intoString:NULL];
-                if ([scanner scanUnsignedInt:&deviceId]) {
+                NSString* prefix = @"Could not decrypt because you didn't trust the sender's device ";
+                if ([dbBody hasPrefix:prefix]) {
+                    NSString* tail = [dbBody substringFromIndex:prefix.length];
+                    deviceId = (unsigned int)[tail intValue];
+                }
+                if (deviceId > 0) {
                     xmpp* acc = [self account];
                     if (acc.omemo) {
                         wireFetchPeerBundle(acc, self.preparedPeerJid, @(deviceId));
