@@ -17,6 +17,7 @@ on:
     branches: ["cursor/**"]
     paths:
       - "interop/monal-native/**"
+      - "interop/clients/**"
       - "scripts/run-monal-wire.sh"
       - "scripts/build-monal-native.sh"
       - "scripts/run-interop-matrix.py"
