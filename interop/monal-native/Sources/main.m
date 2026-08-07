@@ -113,8 +113,10 @@ int main(int argc, char* argv[]) {
                 fprintf(stderr, "ERROR: preparePeer failed: %s\n", err.localizedDescription.UTF8String);
                 return 1;
             }
-            if (![client waitForPeerOmemoReadyWithTimeout:120 error:&err]) {
-                fprintf(stderr, "WARN: peer OMEMO not ready: %s\n", err.localizedDescription.UTF8String);
+            if (![client waitForPeerOmemoReadyWithTimeout:240 error:&err]) {
+                fprintf(stderr, "ERROR: peer OMEMO not ready: %s\n", err.localizedDescription.UTF8String);
+                fflush(stderr);
+                return 1;
             }
         }
 
