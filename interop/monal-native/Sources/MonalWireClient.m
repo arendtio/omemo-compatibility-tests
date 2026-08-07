@@ -84,6 +84,9 @@
     if (!message || !message.messageText.length) {
         return;
     }
+    if ([message.messageText hasPrefix:@"Could not decrypt"]) {
+        return;
+    }
     self.lastBody = message.messageText;
     MonalWireLog([[NSString stringWithFormat:@"incoming body=%@", message.messageText] UTF8String]);
 }
@@ -350,6 +353,49 @@ static void wireQueryOmemoDevices(xmpp* acc, NSString* jid, BOOL subscribe) {
     }
 }
 
+static id wireMakeSignalAddress(NSString* jid, uint32_t deviceId) {
+    Class cls = NSClassFromString(@"SignalAddress");
+    if (!cls) {
+        return nil;
+    }
+    id addr = [cls alloc];
+    SEL initSel = NSSelectorFromString(@"initWithName:deviceId:");
+    return ((id (*)(id, SEL, NSString*, uint32_t))objc_msgSend)(addr, initSel, jid, deviceId);
+}
+
+static BOOL wirePeerOmemoDevicesReady(xmpp* acc, NSString* peerJid) {
+    if (!acc || !acc.omemo || !peerJid.length) {
+        return NO;
+    }
+    NSSet<NSNumber*>* devices = [acc.omemo knownDevicesForAddressName:peerJid];
+    if (devices.count == 0) {
+        return NO;
+    }
+    for (NSNumber* deviceId in devices) {
+        id address = wireMakeSignalAddress(peerJid, deviceId.unsignedIntValue);
+        if (!address) {
+            return NO;
+        }
+        NSData* identity = [acc.omemo getIdentityForAddress:address];
+        if (!identity.length) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+static void wireTrustAllKnownPeerDevices(xmpp* acc, NSString* peerJid) {
+    if (!acc || !acc.omemo || !peerJid.length) {
+        return;
+    }
+    for (NSNumber* deviceId in [acc.omemo knownDevicesForAddressName:peerJid]) {
+        id address = wireMakeSignalAddress(peerJid, deviceId.unsignedIntValue);
+        if (address) {
+            [acc.omemo updateTrust:YES forAddress:address];
+        }
+    }
+}
+
 static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     SEL processSel = NSSelectorFromString(@"processOMEMODevices:from:");
     if ([acc.omemo respondsToSelector:processSel]) {
@@ -462,6 +508,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     MonalWireLog([[NSString stringWithFormat:@"preparePeer: subscribed %@ both ways", peerJid] UTF8String]);
     if (acc.omemo) {
         [acc.omemo subscribeAndFetchDevicelistIfNoSessionExistsForJid:peerJid];
+        wireQueryOmemoDevices(acc, peerJid, YES);
     }
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:60];
     while ([deadline timeIntervalSinceNow] > 0) {
@@ -476,6 +523,27 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
             break;
         }
         [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+    }
+    deadline = [NSDate dateWithTimeIntervalSinceNow:90];
+    BOOL peerDevicesReady = NO;
+    while ([deadline timeIntervalSinceNow] > 0) {
+        if (wirePeerOmemoDevicesReady(acc, peerJid)) {
+            wireTrustAllKnownPeerDevices(acc, peerJid);
+            peerDevicesReady = YES;
+            MonalWireLog([[NSString stringWithFormat:@"preparePeer: trusted %lu OMEMO device(s) for %@",
+                           (unsigned long)[acc.omemo knownDevicesForAddressName:peerJid].count,
+                           peerJid] UTF8String]);
+            break;
+        }
+        if (acc.omemo) {
+            wireQueryOmemoDevices(acc, peerJid, NO);
+        }
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+    }
+    if (!peerDevicesReady) {
+        MonalWireLog([[NSString stringWithFormat:@"preparePeer: peer OMEMO devices not ready for %@ (known=%lu)",
+                       peerJid,
+                       acc.omemo ? (unsigned long)[acc.omemo knownDevicesForAddressName:peerJid].count : 0UL] UTF8String]);
     }
     if (acc.omemo && acc.omemo.openBundleFetchCnt > 0) {
         MonalWireLog([[NSString stringWithFormat:@"preparePeer: bundle fetches still open (%lu)",
@@ -499,7 +567,10 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
 }
 
 - (void)noteBodyIfMatching:(NSString*)body expected:(NSString*)expected {
-    if (body.length && [body isEqualToString:expected]) {
+    if (!body.length || [body hasPrefix:@"Could not decrypt"]) {
+        return;
+    }
+    if ([body isEqualToString:expected]) {
         self.lastBody = body;
     }
 }
