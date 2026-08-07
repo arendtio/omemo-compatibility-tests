@@ -332,6 +332,10 @@ public final class NativeWireClient {
         return lastBody.get() != null && lastBody.get().equals(expected);
     }
 
+    private void writeReadyMarker() throws Exception {
+        Files.writeString(dataDir.resolve("wire-ready"), "ok");
+    }
+
     public void disconnect() {
         if (connection != null && connection.isConnected()) {
             connection.disconnect();
@@ -408,7 +412,7 @@ public final class NativeWireClient {
                     client.ensureRosterPeer(JidCreate.entityBareFrom(peerStr));
                     client.refreshPreparedPeer();
                 }
-                Files.writeString(client.dataDir.resolve("wire-ready"), "ok");
+                client.writeReadyMarker();
                 System.out.println("READY");
                 System.out.flush();
                 boolean ok = client.awaitBody(expectBody, awaitTimeoutSeconds());
