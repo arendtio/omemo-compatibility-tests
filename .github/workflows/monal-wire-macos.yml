@@ -75,7 +75,7 @@ jobs:
 
       - name: Monal wire matrix
         run: |
-          SCENARIO="${{ github.event.inputs.scenario || 'alice_sends_bob_replies' }}"
+          SCENARIO="${{ github.event.inputs.scenario || 'all' }}"
           ARGS=(--pair conversations-native-vs-monal --native-conversations)
           if [ "$SCENARIO" != "all" ]; then
             ARGS+=(--scenario "$SCENARIO")
