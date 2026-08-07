@@ -26,6 +26,7 @@
 @property(nonatomic, assign) BOOL legacyBindTriggered;
 @property(nonatomic, assign) BOOL reconnectNudged;
 @property(nonatomic, assign) BOOL streamStartNudged;
+@property(nonatomic, assign) int streamStartNudgeCount;
 @property(nonatomic, strong) NSDate* loggedInSince;
 @property(nonatomic, strong) NSDate* connectedSince;
 @end
@@ -173,7 +174,11 @@
 - (BOOL)recoverConnectAttempt:(xmpp*)acc phase:(int)phase nextPhase:(int*)nextPhase {
     int state = acc ? (int)acc.accountState : -99;
     if (phase == 0) {
-        if (acc && state >= kStateHasStream && state < kStateInitStarted) {
+        if (acc && state == kStateConnected) {
+            MonalWireLog("connect: recovery phase 0 stream nudge");
+            MonalWireNudgeStreamStart(acc);
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:10.0]];
+        } else if (acc && state >= kStateHasStream && state < kStateInitStarted) {
             MonalWireLog("connect: recovery phase 0 session nudge");
             [self nudgeSessionProgress:acc];
         } else {
@@ -308,6 +313,7 @@
     self.legacyBindTriggered = NO;
     self.reconnectNudged = NO;
     self.streamStartNudged = NO;
+    self.streamStartNudgeCount = 0;
     self.loggedInSince = nil;
     self.connectedSince = nil;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
@@ -346,17 +352,14 @@
         if (acc && acc.accountState == kStateConnected) {
             if (!self.connectedSince) {
                 self.connectedSince = [NSDate date];
-            } else if (!self.streamStartNudged && [self.connectedSince timeIntervalSinceNow] < -5.0) {
-                self.streamStartNudged = YES;
+            } else if (self.streamStartNudgeCount < 3
+                       && [self.connectedSince timeIntervalSinceNow] < -(5.0 + self.streamStartNudgeCount * 10.0)) {
+                self.streamStartNudgeCount++;
                 MonalWireNudgeStreamStart(acc);
-            } else if (!self.reconnectNudged && [self.connectedSince timeIntervalSinceNow] < -12.0) {
-                self.reconnectNudged = YES;
-                [self cycleDisconnectConnect:acc];
-                self.connectedSince = nil;
-                self.streamStartNudged = NO;
             }
         } else {
             self.connectedSince = nil;
+            self.streamStartNudgeCount = 0;
         }
         if (acc && (acc.accountState == kStateDisconnected || acc.accountState == kStateLoggedOut)) {
             [self nudgeAccountConnectIfNeeded];
