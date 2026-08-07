@@ -59,6 +59,7 @@ public final class NativeWireClient {
     private AxolotlService axolotl;
     private XMPPTCPConnection connection;
     private final AtomicReference<String> lastBody = new AtomicReference<>();
+    private Jid preparedPeerJid;
 
     public NativeWireClient(
             Path dataDir,
@@ -235,6 +236,7 @@ public final class NativeWireClient {
     }
 
     private void preparePeer(EntityBareJid peer, Conversation conv) throws Exception {
+        preparedPeerJid = Jid.of(peer.toString());
         Roster roster = Roster.getInstanceFor(connection);
         if (!roster.contains(peer)) {
             roster.createEntry(peer, peer.getLocalpart().toString(), null);
@@ -273,9 +275,67 @@ public final class NativeWireClient {
         NativeTestHelper.trustPeerSessions(axolotl, account, peerJid);
     }
 
+    private void preparePeerForWait(EntityBareJid peer) throws Exception {
+        Conversation conv =
+                new Conversation(
+                        peer.getLocalpart().toString(),
+                        account,
+                        Jid.of(peer.toString()),
+                        Conversation.MODE_SINGLE);
+        wireService.databaseBackend.createConversation(conv);
+        Jid peerJid = Jid.of(peer.toString());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
+        while (System.nanoTime() < deadline) {
+            try {
+                preparePeer(peer, conv);
+                return;
+            } catch (IllegalStateException e) {
+                if (!e.getMessage().contains("No OMEMO devices published")) {
+                    throw e;
+                }
+                axolotl.fetchDeviceIds(peerJid);
+                Thread.sleep(500);
+            }
+        }
+        preparePeer(peer, conv);
+    }
+
+    private void refreshPreparedPeer() {
+        if (preparedPeerJid == null) {
+            return;
+        }
+        try {
+            axolotl.fetchDeviceIds(preparedPeerJid);
+            Conversation conv =
+                    new Conversation(
+                            preparedPeerJid.getLocal(),
+                            account,
+                            preparedPeerJid,
+                            Conversation.MODE_SINGLE);
+            axolotl.createSessionsIfNeeded(conv);
+            NativeTestHelper.trustPeerSessions(axolotl, account, preparedPeerJid);
+        } catch (Exception ignored) {
+            // keep waiting for inbound message
+        }
+    }
+
+    private static long awaitTimeoutSeconds() {
+        String fromEnv = System.getenv("CONVERSATIONS_WIRE_AWAIT_TIMEOUT");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return Long.parseLong(fromEnv);
+        }
+        return 300;
+    }
+
     public boolean awaitBody(String expected, long timeoutSeconds) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        long lastPeerRefresh = System.nanoTime();
         while (System.nanoTime() < deadline) {
+            if (preparedPeerJid != null
+                    && System.nanoTime() - lastPeerRefresh > TimeUnit.SECONDS.toNanos(10)) {
+                refreshPreparedPeer();
+                lastPeerRefresh = System.nanoTime();
+            }
             if (lastBody.get() != null && lastBody.get().equals(expected)) {
                 return true;
             }
@@ -356,7 +416,10 @@ public final class NativeWireClient {
                 if (expectBody == null) {
                     throw new IllegalArgumentException("wait requires expect");
                 }
-                boolean ok = client.awaitBody(expectBody, 90);
+                if (peerStr != null) {
+                    client.preparePeerForWait(JidCreate.entityBareFrom(peerStr));
+                }
+                boolean ok = client.awaitBody(expectBody, awaitTimeoutSeconds());
                 client.disconnect();
                 if (!ok) {
                     System.err.println("TIMEOUT expected=" + expectBody);

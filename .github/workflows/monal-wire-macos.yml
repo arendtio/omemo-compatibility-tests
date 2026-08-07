@@ -18,6 +18,7 @@ on:
     paths:
       - "interop/monal-native/**"
       - "interop/clients/**"
+      - "interop/android/conv-native/**"
       - "scripts/run-monal-wire.sh"
       - "scripts/build-monal-native.sh"
       - "scripts/run-interop-matrix.py"
