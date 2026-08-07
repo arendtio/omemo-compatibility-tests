@@ -159,6 +159,55 @@
     [acc connect];
 }
 
+- (void)nudgeSessionProgress:(xmpp*)acc {
+    if (!acc) {
+        return;
+    }
+    MonalWireLog("connect: nudging session progress (bind/smacks)");
+    MonalWireEnsurePlaintextHooks();
+    [self triggerLegacyBindIfNeeded:acc];
+    [self triggerSmacksFallbackIfNeeded:acc];
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:15.0]];
+}
+
+- (BOOL)recoverConnectAttempt:(xmpp*)acc phase:(int)phase nextPhase:(int*)nextPhase {
+    int state = acc ? (int)acc.accountState : -99;
+    if (phase == 0) {
+        if (acc && state >= kStateHasStream && state < kStateInitStarted) {
+            MonalWireLog("connect: recovery phase 0 session nudge");
+            [self nudgeSessionProgress:acc];
+        } else {
+            MonalWireLog("connect: recovery phase 0 disconnect/connect");
+            [self cycleDisconnectConnect:acc];
+        }
+        *nextPhase = 1;
+        return NO;
+    }
+    if (phase == 1) {
+        if (acc && state >= kStateHasStream && state < kStateInitStarted) {
+            MonalWireLog("connect: recovery phase 1 session nudge");
+            [self nudgeSessionProgress:acc];
+            *nextPhase = 2;
+            return NO;
+        }
+        MonalWireLog("connect: recovery phase 1 disconnect/connect");
+        [self cycleDisconnectConnect:acc];
+        *nextPhase = 2;
+        return NO;
+    }
+    if (acc && state >= kStateHasStream) {
+        MonalWireLog("connect: recovery phase 2 session nudge (skip reset)");
+        [self nudgeSessionProgress:acc];
+        *nextPhase = 0;
+        return NO;
+    }
+    MonalWireLog("connect: recovery phase 2 full reset");
+    [self resetAccountForRetry];
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:10.0]];
+    *nextPhase = 0;
+    return YES;
+}
+
 - (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
     MonalWireLog("connect: begin");
     [HelperTools initSystem];
@@ -183,7 +232,7 @@
     NSDate* overallDeadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     int recoveryPhase = 0;
     while ([overallDeadline timeIntervalSinceNow] > 0) {
-        NSTimeInterval slice = MIN(45.0, [overallDeadline timeIntervalSinceNow]);
+        NSTimeInterval slice = MIN(75.0, [overallDeadline timeIntervalSinceNow]);
         if (slice <= 0) {
             break;
         }
@@ -192,25 +241,12 @@
         }
 
         xmpp* acc = [self account];
-        if (recoveryPhase == 0) {
-            MonalWireLog("connect: recovery phase 0 disconnect/connect");
-            [self cycleDisconnectConnect:acc];
-            recoveryPhase = 1;
-        } else if (recoveryPhase == 1) {
-            MonalWireLog("connect: recovery phase 1 disconnect/connect");
-            [self cycleDisconnectConnect:acc];
-            recoveryPhase = 2;
-        } else {
-            MonalWireLog("connect: recovery phase 2 full reset");
-            [self resetAccountForRetry];
-            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:10.0]];
-            if (![self startAccountLogin]) {
-                if (error) {
-                    *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed after reset"}];
-                }
-                return NO;
+        BOOL needsLogin = [self recoverConnectAttempt:acc phase:recoveryPhase nextPhase:&recoveryPhase];
+        if (needsLogin && ![self startAccountLogin]) {
+            if (error) {
+                *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed after reset"}];
             }
-            recoveryPhase = 0;
+            return NO;
         }
         MonalWireEnsurePlaintextHooks();
     }
