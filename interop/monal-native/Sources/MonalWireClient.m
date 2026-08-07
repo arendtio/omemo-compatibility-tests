@@ -84,7 +84,8 @@
     if (!message || !message.messageText.length) {
         return;
     }
-    if ([message.messageText hasPrefix:@"Could not decrypt"]) {
+    if ([message.messageText hasPrefix:@"Could not decrypt"]
+        || [message.messageText hasPrefix:@"OMEMO:"]) {
         return;
     }
     self.lastBody = message.messageText;
@@ -619,7 +620,7 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
 }
 
 - (void)noteBodyIfMatching:(NSString*)body expected:(NSString*)expected {
-    if (!body.length || [body hasPrefix:@"Could not decrypt"]) {
+    if (!body.length || [body hasPrefix:@"Could not decrypt"] || [body hasPrefix:@"OMEMO:"]) {
         return;
     }
     if ([body isEqualToString:expected]) {

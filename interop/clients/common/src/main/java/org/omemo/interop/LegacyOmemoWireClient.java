@@ -54,6 +54,7 @@ public final class LegacyOmemoWireClient {
     private OmemoManager omemoManager;
     private final AtomicReference<String> lastBody = new AtomicReference<>();
     private CountDownLatch receiveLatch;
+    private EntityBareJid preparedPeer;
 
     public LegacyOmemoWireClient(
             String implementationId,
@@ -223,6 +224,7 @@ public final class LegacyOmemoWireClient {
     }
 
     private void preparePeer(EntityBareJid peer) throws Exception {
+        preparedPeer = peer;
         Roster roster = Roster.getInstanceFor(connection);
         if (!roster.contains(peer)) {
             roster.createEntry(peer, peer.getLocalpart().toString(), null);
@@ -258,7 +260,18 @@ public final class LegacyOmemoWireClient {
     public boolean awaitBody(String expected, long timeoutSeconds) throws InterruptedException {
         receiveLatch = new CountDownLatch(1);
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        long lastPeerRefresh = System.nanoTime();
         while (System.nanoTime() < deadline) {
+            if (preparedPeer != null
+                    && System.nanoTime() - lastPeerRefresh > TimeUnit.SECONDS.toNanos(10)) {
+                try {
+                    omemoManager.requestDeviceListUpdateFor(preparedPeer);
+                    trustAllDevices(preparedPeer);
+                } catch (Exception ignored) {
+                    // keep waiting
+                }
+                lastPeerRefresh = System.nanoTime();
+            }
             if (lastBody.get() != null && lastBody.get().equals(expected)) {
                 return true;
             }
@@ -266,6 +279,14 @@ public final class LegacyOmemoWireClient {
             receiveLatch = new CountDownLatch(1);
         }
         return lastBody.get() != null && lastBody.get().equals(expected);
+    }
+
+    private static long awaitTimeoutSeconds() {
+        String fromEnv = System.getenv("CONVERSATIONS_WIRE_AWAIT_TIMEOUT");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return Long.parseLong(fromEnv);
+        }
+        return 300;
     }
 
     public void disconnect() {
@@ -388,7 +409,11 @@ public final class LegacyOmemoWireClient {
                 if (expectBody == null) {
                     throw new IllegalArgumentException("wait requires --expect");
                 }
-                boolean ok = client.awaitBody(expectBody, 60);
+                if (peerStr != null) {
+                    EntityBareJid peer = JidCreate.entityBareFrom(peerStr);
+                    client.preparePeer(peer);
+                }
+                boolean ok = client.awaitBody(expectBody, awaitTimeoutSeconds());
                 client.disconnect();
                 if (!ok) {
                     System.err.println("TIMEOUT expected=" + expectBody);
