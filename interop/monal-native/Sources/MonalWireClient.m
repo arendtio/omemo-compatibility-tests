@@ -785,6 +785,19 @@ static void wireForceOmemoPublish(xmpp* acc, NSString* ownJid) {
     return [self.lastBody isEqualToString:expected];
 }
 
+- (BOOL)waitForSendSignalWithTimeout:(NSTimeInterval)timeout {
+    NSString* signalPath = [self.dataDir.path stringByAppendingPathComponent:@"wire-send-now"];
+    NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    while ([deadline timeIntervalSinceNow] > 0) {
+        if ([[NSFileManager defaultManager] fileExistsAtPath:signalPath]) {
+            [[NSFileManager defaultManager] removeItemAtPath:signalPath error:nil];
+            return YES;
+        }
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.25]];
+    }
+    return NO;
+}
+
 - (void)disconnect {
     if (self.accountID != nil) {
         [[MLXMPPManager sharedInstance] disconnectAccount:self.accountID withExplicitLogout:YES];

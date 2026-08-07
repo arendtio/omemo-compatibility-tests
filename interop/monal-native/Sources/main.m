@@ -3,7 +3,7 @@
 #import "WireBootstrap.h"
 
 static void usage(void) {
-    fprintf(stderr, "Usage: MonalWire --mode <publish|send|wait> [--peer JID] [--send BODY] [--expect BODY] -- --jid JID --password PASS [--host HOST] [--port PORT] [--data-dir PATH]\n");
+    fprintf(stderr, "Usage: MonalWire --mode <publish|hold-send|send|wait> [--peer JID] [--send BODY] [--expect BODY] -- --jid JID --password PASS [--host HOST] [--port PORT] [--data-dir PATH]\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -99,6 +99,31 @@ int main(int argc, char* argv[]) {
         }
 
         if ([mode isEqualToString:@"publish"]) {
+            [client disconnect];
+            printf("OK\n");
+            return 0;
+        }
+
+        if ([mode isEqualToString:@"hold-send"]) {
+            if (!peer || !sendBody) {
+                fprintf(stderr, "hold-send requires --peer and --send\n");
+                return 1;
+            }
+            [client preparePeer:peer error:&err];
+            NSString* readyPath = [dataDir.path stringByAppendingPathComponent:@"wire-ready"];
+            [@"ok" writeToFile:readyPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            printf("READY\n");
+            fflush(stdout);
+            if (![client waitForSendSignalWithTimeout:600]) {
+                fprintf(stderr, "TIMEOUT waiting for wire-send-now signal\n");
+                [client disconnect];
+                return 1;
+            }
+            if (![client sendEncrypted:peer body:sendBody error:&err]) {
+                fprintf(stderr, "ERROR: send failed: %s\n", err.localizedDescription.UTF8String);
+                [client disconnect];
+                return 1;
+            }
             [client disconnect];
             printf("OK\n");
             return 0;

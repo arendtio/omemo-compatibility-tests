@@ -203,6 +203,7 @@ public final class NativeWireClient {
             XmppAxolotlMessage.XmppAxolotlPlaintextMessage plain =
                     axolotl.processReceivingPayloadMessage(payload, false);
             if (plain != null) {
+                System.out.println("incoming body=" + plain.getPlaintext());
                 lastBody.set(plain.getPlaintext());
             }
         } catch (Exception ignored) {
@@ -489,11 +490,7 @@ public final class NativeWireClient {
                 if (peerStr != null) {
                     EntityBareJid peer = JidCreate.entityBareFrom(peerStr);
                     client.ensureRosterPeer(peer);
-                    try {
-                        client.waitForPeerOmemoReady(peer, 120);
-                    } catch (IllegalStateException e) {
-                        System.err.println("WARN: " + e.getMessage());
-                    }
+                    client.waitForPeerOmemoReady(peer, 240);
                     client.refreshPreparedPeer();
                 }
                 client.writeReadyMarker();
