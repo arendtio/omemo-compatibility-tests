@@ -19,7 +19,9 @@ def native_wire_env() -> dict[str, str]:
 
 
 def gradle_wire_cmd(props: Mapping[str, str]) -> list[str]:
-    cmd = [str(GRADLEW), ":conv-native:conversationsCryptoWire", "--no-daemon"]
+    cmd = [str(GRADLEW), ":conv-native:conversationsCryptoWire"]
+    if os.environ.get("GRADLE_NO_DAEMON") == "1":
+        cmd.append("--no-daemon")
     for key, value in props.items():
         cmd.append(f"-P{key}={value}")
     return cmd

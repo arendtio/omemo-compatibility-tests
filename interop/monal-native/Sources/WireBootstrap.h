@@ -21,4 +21,7 @@ void MonalWireForcePlaintextStreamReady(xmpp* account);
 /// Run block on Monal's XMPP receive queue (required for bind/session ops).
 void MonalWireDispatchOnReceiveQueue(xmpp* account, void (^block)(void));
 
+/// Re-send stream open when stuck at kStateConnected (TCP up, no features yet).
+void MonalWireNudgeStreamStart(xmpp* account);
+
 NS_ASSUME_NONNULL_END

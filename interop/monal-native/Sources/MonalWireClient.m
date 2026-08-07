@@ -25,6 +25,7 @@
 @property(nonatomic, assign) BOOL smacksFallbackScheduled;
 @property(nonatomic, assign) BOOL legacyBindTriggered;
 @property(nonatomic, assign) BOOL reconnectNudged;
+@property(nonatomic, assign) BOOL streamStartNudged;
 @property(nonatomic, strong) NSDate* loggedInSince;
 @property(nonatomic, strong) NSDate* connectedSince;
 @end
@@ -132,11 +133,27 @@
 }
 
 - (void)resetAccountForRetry {
-    if (self.accountID != nil) {
-        [[MLXMPPManager sharedInstance] removeAccountForAccountID:self.accountID];
+    NSNumber* oldId = self.accountID;
+    if (oldId != nil) {
+        [[MLXMPPManager sharedInstance] disconnectAccount:oldId withExplicitLogout:YES];
+        [[MLXMPPManager sharedInstance] removeAccountForAccountID:oldId];
         self.accountID = nil;
     }
     MonalWireResetDataStore(self.dataDir);
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:5.0]];
+    MonalWireEnsurePlaintextHooks();
+}
+
+- (void)cycleDisconnectConnect:(xmpp*)acc {
+    if (!acc) {
+        [self nudgeAccountConnectIfNeeded];
+        return;
+    }
+    MonalWireLog("connect: cycling disconnect/connect");
+    [acc disconnect:NO];
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:3.0]];
+    MonalWireEnsurePlaintextHooks();
+    [acc connect];
 }
 
 - (BOOL)connectWithTimeout:(NSTimeInterval)timeout error:(NSError**)error {
@@ -153,40 +170,54 @@
                                                name:kMonalNewMessageNotice
                                              object:nil];
 
-    for (int attempt = 1; attempt <= 4; attempt++) {
-        if (attempt > 1) {
-            MonalWireLog("connect: retry after failure");
-            if (attempt >= 3) {
-                [self resetAccountForRetry];
-                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:15.0]];
-                if (![self startAccountLogin]) {
-                    if (error) {
-                        *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
-                    }
-                    return NO;
-                }
-            } else {
-                xmpp* acc = [self account];
-                if (acc) {
-                    MonalWireLog("connect: soft retry reconnect");
-                    [acc reconnect:2.0];
-                } else {
-                    [self nudgeAccountConnectIfNeeded];
-                }
-                [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:5.0]];
-            }
-            MonalWireEnsurePlaintextHooks();
-        } else if (![self startAccountLogin]) {
-            if (error) {
-                *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
-            }
-            return NO;
-        } else {
-            [self nudgeAccountConnectIfNeeded];
+    if (![self startAccountLogin]) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed"}];
         }
-        if ([self waitForSessionWithTimeout:timeout error:error]) {
+        return NO;
+    }
+
+    NSDate* overallDeadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    int recoveryPhase = 0;
+    while ([overallDeadline timeIntervalSinceNow] > 0) {
+        NSTimeInterval slice = MIN(45.0, [overallDeadline timeIntervalSinceNow]);
+        if (slice <= 0) {
+            break;
+        }
+        if ([self waitForSessionWithTimeout:slice error:error]) {
             return YES;
         }
+
+        xmpp* acc = [self account];
+        if (recoveryPhase == 0) {
+            MonalWireLog("connect: recovery phase 0 disconnect/connect");
+            [self cycleDisconnectConnect:acc];
+            recoveryPhase = 1;
+        } else if (recoveryPhase == 1) {
+            MonalWireLog("connect: recovery phase 1 disconnect/connect");
+            [self cycleDisconnectConnect:acc];
+            recoveryPhase = 2;
+        } else {
+            MonalWireLog("connect: recovery phase 2 full reset");
+            [self resetAccountForRetry];
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:10.0]];
+            if (![self startAccountLogin]) {
+                if (error) {
+                    *error = [NSError errorWithDomain:@"MonalWire" code:1 userInfo:@{NSLocalizedDescriptionKey: @"login failed after reset"}];
+                }
+                return NO;
+            }
+            recoveryPhase = 0;
+        }
+        MonalWireEnsurePlaintextHooks();
+    }
+
+    if (error && !*error) {
+        xmpp* acc = [self account];
+        int state = acc ? (int)acc.accountState : -99;
+        *error = [NSError errorWithDomain:@"MonalWire" code:2 userInfo:@{
+            NSLocalizedDescriptionKey: [NSString stringWithFormat:@"timeout waiting for XMPP session (state=%d)", state],
+        }];
     }
     return NO;
 }
@@ -226,7 +257,6 @@
         self.loggedInSince = [NSDate date];
         return;
     }
-    // Wait for ejabberd post-auth stream features before forcing legacy bind.
     if ([self.loggedInSince timeIntervalSinceNow] > -8.0) {
         return;
     }
@@ -238,6 +268,7 @@
     self.smacksFallbackScheduled = NO;
     self.legacyBindTriggered = NO;
     self.reconnectNudged = NO;
+    self.streamStartNudged = NO;
     self.loggedInSince = nil;
     self.connectedSince = nil;
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
@@ -276,14 +307,20 @@
         if (acc && acc.accountState == kStateConnected) {
             if (!self.connectedSince) {
                 self.connectedSince = [NSDate date];
-            } else if (!self.reconnectNudged && [self.connectedSince timeIntervalSinceNow] < -20.0) {
+            } else if (!self.streamStartNudged && [self.connectedSince timeIntervalSinceNow] < -5.0) {
+                self.streamStartNudged = YES;
+                MonalWireNudgeStreamStart(acc);
+            } else if (!self.reconnectNudged && [self.connectedSince timeIntervalSinceNow] < -12.0) {
                 self.reconnectNudged = YES;
-                MonalWireLog("connect: nudging reconnect from state 2");
-                [acc reconnect:1.0];
+                [self cycleDisconnectConnect:acc];
                 self.connectedSince = nil;
+                self.streamStartNudged = NO;
             }
         } else {
             self.connectedSince = nil;
+        }
+        if (acc && (acc.accountState == kStateDisconnected || acc.accountState == kStateLoggedOut)) {
+            [self nudgeAccountConnectIfNeeded];
         }
         [self triggerLegacyBindIfNeeded:acc];
         [self triggerSmacksFallbackIfNeeded:acc];

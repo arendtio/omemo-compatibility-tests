@@ -299,6 +299,21 @@ void MonalWireDispatchOnReceiveQueue(xmpp* account, void (^block)(void)) {
     }
 }
 
+void MonalWireNudgeStreamStart(xmpp* account) {
+    if (!account || account.accountState != kStateConnected) {
+        return;
+    }
+    MonalWireLog("connect: nudging XMPP stream start at state 2");
+    MonalWireForcePlaintextStreamReady(account);
+    SEL sel = NSSelectorFromString(@"startXMPPStreamWithXMLOpening:withStartTLS:andDirectWrite:");
+    if (![account respondsToSelector:sel]) {
+        return;
+    }
+    MonalWireDispatchOnReceiveQueue(account, ^{
+        ((void (*)(id, SEL, BOOL, BOOL, BOOL))objc_msgSend)(account, sel, YES, NO, YES);
+    });
+}
+
 void MonalWireTriggerLegacyBindAfterSasl2(xmpp* account) {
     if (!account || account.accountState != kStateLoggedIn) {
         return;
