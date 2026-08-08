@@ -30,10 +30,15 @@ skip_no_android = pytest.mark.skipif(
     not __import__("os").environ.get("ANDROID_HOME"),
     reason="ANDROID_HOME unset",
 )
+skip_no_macos = pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="Monal/Siskin native wire requires macOS",
+)
 
 
 @pytest.mark.wire
 @pytest.mark.native
+@skip_no_macos
 @skip_no_android
 @skip_no_server
 def test_native_conversations_vs_siskin_matrix() -> None:
@@ -48,6 +53,7 @@ def test_native_conversations_vs_siskin_matrix() -> None:
 
 @pytest.mark.wire
 @pytest.mark.native
+@skip_no_macos
 @skip_no_android
 @skip_no_server
 def test_native_conversations_vs_monal_matrix() -> None:
@@ -62,6 +68,7 @@ def test_native_conversations_vs_monal_matrix() -> None:
 
 @pytest.mark.wire
 @pytest.mark.native
+@skip_no_macos
 @skip_no_android
 @skip_no_server
 def test_native_conversations_self_roundtrip_via_script() -> None:

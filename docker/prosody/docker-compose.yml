@@ -5,15 +5,11 @@ services:
     ports:
       - "5222:5222"
     volumes:
-      - ./prosody.cfg.lua:/etc/prosody/prosody.cfg.lua:ro
+      - ./prosody.cfg.lua:/etc/prosody/conf.d/interop.cfg.lua:ro
       - prosody_data:/var/lib/prosody
-    entrypoint: /bin/sh
-    command:
-      - -c
-      - |
-        prosodyctl register alice localhost alicepass || true
-        prosodyctl register bob localhost bobpass || true
-        exec prosody -F
+    environment:
+      PROSODY_VIRTUAL_HOSTS: localhost
+      PROSODY_LOGLEVEL: info
     healthcheck:
       test: ["CMD", "prosodyctl", "status"]
       interval: 5s

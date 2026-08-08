@@ -200,6 +200,7 @@ def test_documented_file_key_size_differs_from_message() -> None:
 
 
 @pytest.mark.compatibility
+@pytest.mark.vendor_bug
 def test_trust_model_siskin_must_not_ignore_compromised_identities(compat_findings: list[dict]) -> None:
     """P1 siskin_trust_callback_always_true: Siskin isTrusted must not always return true."""
     gap = next(g for g in compat_findings if g["id"] == "siskin_trust_callback_always_true")

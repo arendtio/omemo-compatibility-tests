@@ -375,6 +375,14 @@ def scenario_bob_sends_alice_replies(
     left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     """Bob (right) initiates; Alice (left) replies — tests reverse prekey handshake."""
+    if uses_native_hold_send(left, right, pair, native_conversations):
+        return scenario_bob_sends_alice_replies_native(left, right, matrix, pair, native_conversations)
+    return scenario_bob_sends_alice_replies_smack(left, right, matrix, pair, native_conversations)
+
+
+def scenario_bob_sends_alice_replies_native(
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
+) -> int:
     alice_jid = "alice@localhost"
     bob_jid = "bob@localhost"
     tag = f"{right}-to-{left}"
@@ -471,7 +479,94 @@ def scenario_bob_sends_alice_replies(
         return 1
 
 
+def scenario_bob_sends_alice_replies_smack(
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
+) -> int:
+    alice_jid = "alice@localhost"
+    bob_jid = "bob@localhost"
+    tag = f"{right}-to-{left}"
+
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+    rc = prewarm_omemo_publish(
+        right, matrix, pair, bob_jid, "bobpass", native_conversations, False, bob_data,
+    )
+    if rc != 0:
+        return rc
+
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    alice_proc = spawn_client(
+        left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        expect=f"hello-{tag}",
+        data_dir=alice_data,
+    )
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "wait", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
+        return rc
+
+    rc = invoke_client(
+        right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        send=f"hello-{tag}",
+        data_dir=bob_data,
+    )
+    if rc != 0:
+        alice_proc.kill()
+        return rc
+
+    try:
+        alice_rc = alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
+        return 1
+    if alice_rc != 0:
+        return alice_rc
+
+    rc = prewarm_omemo_publish(
+        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    )
+    if rc != 0:
+        return rc
+
+    bob_proc = spawn_client(
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        expect=f"reply-{tag}",
+        data_dir=bob_data,
+    )
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
+    time.sleep(15)
+    rc = invoke_client(
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=f"reply-{tag}",
+        data_dir=alice_data,
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        return bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+
+
 def scenario_unicode_body_roundtrip(
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
+) -> int:
+    if uses_native_hold_send(left, right, pair, native_conversations):
+        return scenario_unicode_body_roundtrip_native(left, right, matrix, pair, native_conversations)
+    return scenario_unicode_body_roundtrip_smack(left, right, matrix, pair, native_conversations)
+
+
+def scenario_unicode_body_roundtrip_native(
     left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     alice_jid = "alice@localhost"
@@ -572,6 +667,83 @@ def scenario_unicode_body_roundtrip(
         return 1
 
 
+def scenario_unicode_body_roundtrip_smack(
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
+) -> int:
+    alice_jid = "alice@localhost"
+    bob_jid = "bob@localhost"
+    tag = f"{left}-to-{right}"
+    hello = f"hello-unicode-🧪-{tag}"
+    reply = f"reply-unicode-🧪-{tag}"
+
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    rc = prewarm_omemo_publish(
+        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    )
+    if rc != 0:
+        return rc
+    time.sleep(10)
+
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+    bob_proc = spawn_client(
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        expect=hello,
+        data_dir=bob_data,
+    )
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
+
+    time.sleep(15)
+    rc = invoke_client(
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=hello,
+        data_dir=alice_data,
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+    if bob_rc != 0:
+        dump_wire_log(bob_data)
+        return bob_rc
+
+    bob_proc = spawn_client(
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        expect=reply,
+        data_dir=bob_data,
+    )
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
+    time.sleep(15)
+    rc = invoke_client(
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=reply,
+        data_dir=alice_data,
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        return bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+
+
 def scenario_repeated_session_messages(
     left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
@@ -593,12 +765,30 @@ SCENARIO_HANDLERS = {
 }
 
 
+def uses_native_hold_send(
+    left: str, right: str, pair: dict, native_conversations: bool,
+) -> bool:
+    """Native wire clients (Monal/Siskin/Conversations native) use hold-send ordering."""
+    return (
+        use_native_wire(left, pair, True, native_conversations)
+        or use_native_wire(right, pair, False, native_conversations)
+    )
+
+
 def signal_hold_send(data_dir: Path) -> None:
     """Tell a hold-send wire client to encrypt and send."""
     (data_dir / "wire-send-now").write_text("go", encoding="utf-8")
 
 
 def scenario_alice_sends_bob_replies(
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
+) -> int:
+    if uses_native_hold_send(left, right, pair, native_conversations):
+        return scenario_alice_sends_bob_replies_native(left, right, matrix, pair, native_conversations)
+    return scenario_alice_sends_bob_replies_smack(left, right, matrix, pair, native_conversations)
+
+
+def scenario_alice_sends_bob_replies_native(
     left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
 ) -> int:
     alice_jid = "alice@localhost"
@@ -694,6 +884,81 @@ def scenario_alice_sends_bob_replies(
         return alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
         alice_proc.kill()
+        return 1
+
+
+def scenario_alice_sends_bob_replies_smack(
+    left: str, right: str, matrix: dict, pair: dict, native_conversations: bool = False,
+) -> int:
+    alice_jid = "alice@localhost"
+    bob_jid = "bob@localhost"
+    tag = f"{left}-to-{right}"
+
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+    rc = prewarm_omemo_publish(
+        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    )
+    if rc != 0:
+        return rc
+    time.sleep(10)
+
+    bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
+    bob_proc = spawn_client(
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        expect=f"hello-{tag}",
+        data_dir=bob_data,
+    )
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
+
+    time.sleep(15)
+    rc = invoke_client(
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=f"hello-{tag}",
+        data_dir=alice_data,
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
+        return 1
+    if bob_rc != 0:
+        dump_wire_log(bob_data)
+        return bob_rc
+
+    bob_proc = spawn_client(
+        right, matrix, pair, "wait", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        expect=f"reply-{tag}",
+        data_dir=bob_data,
+    )
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
+        return rc
+    time.sleep(15)
+    rc = invoke_client(
+        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=f"reply-{tag}",
+        data_dir=alice_data,
+    )
+    if rc != 0:
+        bob_proc.kill()
+        return rc
+    try:
+        return bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
         return 1
 
 

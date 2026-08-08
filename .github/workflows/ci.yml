@@ -144,6 +144,13 @@ jobs:
       - name: Start Prosody
         run: docker compose -f docker/prosody/docker-compose.yml up -d --wait
 
+      - name: Register Prosody test users
+        run: |
+          docker compose -f docker/prosody/docker-compose.yml exec -T prosody \
+            prosodyctl register alice localhost alicepass || true
+          docker compose -f docker/prosody/docker-compose.yml exec -T prosody \
+            prosodyctl register bob localhost bobpass || true
+
       - name: Prosody server-matrix roundtrip
         run: python3 scripts/run-server-matrix.py --profile prosody
         env:
