@@ -36,7 +36,9 @@ pairs:
     native_right: true
     scenarios:
       - alice_sends_bob_replies
+      - bob_sends_alice_replies
       - unicode_body_roundtrip
+      - repeated_session_messages
 
   - id: conversations-native-vs-monal
     description: Conversations vendor AxolotlService vs Monal MLOMEMO (macOS native right)
@@ -46,7 +48,9 @@ pairs:
     native_right: true
     scenarios:
       - alice_sends_bob_replies
+      - bob_sends_alice_replies
       - unicode_body_roundtrip
+      - repeated_session_messages
 
   - id: conversations-native-vs-siskin-smack
     description: "DEPRECATED: Conversations native vs Siskin Smack proxy (use conversations-native-vs-siskin on macOS)"

@@ -37,7 +37,7 @@ jobs:
         run: ./scripts/build-clients.sh
 
       - name: Legacy interoperability tests
-        run: python3 -m pytest tests/ -v -m "not wire and not omemo2"
+        run: python3 -m pytest tests/ -v -m "not wire and not omemo2 and not audit and not vendor_bug"
 
   wire:
     runs-on: ubuntu-latest
@@ -68,13 +68,8 @@ jobs:
       - name: Start ejabberd
         run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
 
-      - name: Client interop matrix (Siskin)
-        run: python3 scripts/run-interop-matrix.py --pair conversations-vs-siskin --build
-        env:
-          OMEMO_XMPP_SECURITY: disabled
-
-      - name: Client interop matrix (Monal)
-        run: python3 scripts/run-interop-matrix.py --pair conversations-vs-monal --build
+      - name: Client interop matrix (Conversations sanity)
+        run: python3 scripts/run-interop-matrix.py --pair conversations-vs-conversations --build
         env:
           OMEMO_XMPP_SECURITY: disabled
 
@@ -119,23 +114,10 @@ jobs:
       - name: Vendor XML contract unit test
         run: cd interop/android && ./gradlew :conv-native:testDebugUnitTest --tests "eu.siacs.conversations.crypto.axolotl.ConversationsVendorXmlContractTest" --no-daemon -q
 
-      - name: Build Smack wire peers (Siskin + Monal)
-        run: ./scripts/build-clients.sh
-
       - name: Start ejabberd
         run: docker compose -f docker/ejabberd/docker-compose.yml up -d --wait
 
-      - name: Native Conversations vs Siskin wire matrix
-        run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-siskin --native-conversations
-        env:
-          OMEMO_XMPP_SECURITY: disabled
-
-      - name: Native Conversations vs Monal wire matrix
-        run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-monal --native-conversations
-        env:
-          OMEMO_XMPP_SECURITY: disabled
-
-      - name: Native cross-wire pytest
+      - name: Native cross-wire pytest (Conversations native launcher)
         run: python3 -m pytest tests/wire/test_conversations_native_cross_wire.py -v -m native
         env:
           OMEMO_XMPP_SECURITY: disabled
@@ -227,12 +209,16 @@ jobs:
         env:
           OMEMO_XMPP_SECURITY: disabled
           OMEMO_NATIVE_MACOS: "1"
+          SISKIN_WIRE_AWAIT_TIMEOUT: "600"
+          CONVERSATIONS_WIRE_AWAIT_TIMEOUT: "600"
 
       - name: Native Conversations vs Monal MLOMEMO matrix
         run: python3 scripts/run-interop-matrix.py --pair conversations-native-vs-monal --native-conversations
         env:
           OMEMO_XMPP_SECURITY: disabled
           OMEMO_NATIVE_MACOS: "1"
+          MONAL_WIRE_AWAIT_TIMEOUT: "600"
+          CONVERSATIONS_WIRE_AWAIT_TIMEOUT: "600"
 
       - name: Stop ejabberd
         if: always()

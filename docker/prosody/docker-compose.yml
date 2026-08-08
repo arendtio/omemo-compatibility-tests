@@ -1,6 +1,6 @@
 services:
   prosody:
-    image: prosody/prosody:13.0
+    image: prosodyim/prosody:13.0
     container_name: omemo-interop-prosody
     ports:
       - "5222:5222"

@@ -380,13 +380,20 @@ def scenario_bob_sends_alice_replies(
     tag = f"{right}-to-{left}"
 
     bob_data = ROOT / "tmp" / "wire-data" / right / "bob"
-    rc = prewarm_omemo_publish(
-        right, matrix, pair, bob_jid, "bobpass", native_conversations, False, bob_data,
+    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
+
+    bob_proc = spawn_client(
+        right, matrix, pair, "hold-send", bob_jid, "bobpass", native_conversations, False,
+        peer=alice_jid,
+        send=f"hello-{tag}",
+        data_dir=bob_data,
     )
-    if rc != 0:
+    rc = wait_after_spawn_wait(
+        right, matrix, pair, "hold-send", native_conversations, False, bob_proc, bob_data,
+    )
+    if rc is not None:
         return rc
 
-    alice_data = ROOT / "tmp" / "wire-data" / left / "alice"
     alice_proc = spawn_client(
         left, matrix, pair, "wait", alice_jid, "alicepass", native_conversations, True,
         peer=bob_jid,
@@ -397,17 +404,20 @@ def scenario_bob_sends_alice_replies(
         left, matrix, pair, "wait", native_conversations, True, alice_proc, alice_data,
     )
     if rc is not None:
+        bob_proc.kill()
         return rc
 
-    rc = invoke_client(
-        right, matrix, pair, "send", bob_jid, "bobpass", native_conversations, False,
-        peer=alice_jid,
-        send=f"hello-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / right / "bob",
-    )
-    if rc != 0:
+    signal_hold_send(bob_data)
+    try:
+        bob_rc = bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        bob_proc.kill()
         alice_proc.kill()
-        return rc
+        return 1
+    if bob_rc != 0:
+        alice_proc.kill()
+        dump_wire_log(bob_data)
+        return bob_rc
 
     try:
         alice_rc = alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
@@ -415,12 +425,19 @@ def scenario_bob_sends_alice_replies(
         alice_proc.kill()
         return 1
     if alice_rc != 0:
+        dump_wire_log(alice_data)
         return alice_rc
 
-    rc = prewarm_omemo_publish(
-        left, matrix, pair, alice_jid, "alicepass", native_conversations, True, alice_data,
+    alice_proc = spawn_client(
+        left, matrix, pair, "hold-send", alice_jid, "alicepass", native_conversations, True,
+        peer=bob_jid,
+        send=f"reply-{tag}",
+        data_dir=alice_data,
     )
-    if rc != 0:
+    rc = wait_after_spawn_wait(
+        left, matrix, pair, "hold-send", native_conversations, True, alice_proc, alice_data,
+    )
+    if rc is not None:
         return rc
 
     bob_proc = spawn_client(
@@ -433,17 +450,20 @@ def scenario_bob_sends_alice_replies(
         right, matrix, pair, "wait", native_conversations, False, bob_proc, bob_data,
     )
     if rc is not None:
+        alice_proc.kill()
         return rc
-    time.sleep(15)
-    rc = invoke_client(
-        left, matrix, pair, "send", alice_jid, "alicepass", native_conversations, True,
-        peer=bob_jid,
-        send=f"reply-{tag}",
-        data_dir=ROOT / "tmp" / "wire-data" / left / "alice",
-    )
-    if rc != 0:
+
+    signal_hold_send(alice_data)
+    try:
+        alice_rc = alice_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        alice_proc.kill()
         bob_proc.kill()
-        return rc
+        return 1
+    if alice_rc != 0:
+        bob_proc.kill()
+        dump_wire_log(alice_data)
+        return alice_rc
     try:
         return bob_proc.wait(timeout=NATIVE_WIRE_WAIT_TIMEOUT)
     except subprocess.TimeoutExpired:
@@ -788,6 +808,14 @@ def main() -> int:
     if pair is None:
         print(f"Unknown pair: {args.pair}", file=sys.stderr)
         return 1
+
+    if pair.get("deprecated_smack_proxy") and os.environ.get("OMEMO_FORCE_SMACK_PROXY") != "1":
+        print(
+            f"SKIP deprecated Smack proxy pair {pair['id']} "
+            "(use conversations-native-vs-* on macOS or OMEMO_FORCE_SMACK_PROXY=1)",
+            file=sys.stderr,
+        )
+        return 0
 
     clients = {pair["left"], pair["right"]}
     native_conversations = args.native_conversations or bool(

@@ -42,7 +42,7 @@ public final class SiskinNativeWireClient {
     }
 
     @MainActor
-    public func connect(remotePeer: BareJID? = nil) async throws {
+    public func connect() async throws {
         WireLog.line("connect: begin")
         let files = WireFileOMEMOStore(accountJid: jid.description, dataDir: dataDir)
         WireLog.line("connect: storage files ready")
@@ -74,6 +74,7 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
         _ = client.modulesManager.register(PresenceModule())
         _ = client.modulesManager.register(PubSubModule())
+        _ = client.modulesManager.register(RosterModule())
         _ = client.modulesManager.register(wireIncoming)
         _ = client.modulesManager.register(omemo)
         WireLog.line("connect: modules registered")
@@ -102,12 +103,69 @@ public final class SiskinNativeWireClient {
         WireLog.line("connect: omemo ready")
         try await client.module(.presence).sendPresence()
         WireLog.line("connect: presence sent")
-        if let remotePeer {
-            WireLog.line("connect: wait peer=\(remotePeer)")
-        }
         pumpRunLoop(seconds: 2)
+    }
+
+    @MainActor
+    public func ensureRosterPeer(_ peer: BareJID) async throws {
+        let roster = client.module(.roster)
+        let peerJid = JID(peer)
+        if roster.rosterManager.items(for: client.context).contains(where: { $0.jid == peerJid }) {
+            return
+        }
+        try await roster.addItem(jid: peerJid, name: peer.localPart, groups: [])
+        WireLog.line("ensureRosterPeer: subscribed \(peer)")
+        pumpRunLoop(seconds: 1)
+    }
+
+    @MainActor
+    public func waitForPeerOmemoReady(peer: BareJID, timeoutSeconds: Int) async throws {
+        guard let omemo = omemoModule, let storage else {
+            throw WireError.notConnected
+        }
+        WireLog.line("waitForPeerOmemoReady: \(peer)")
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
+        while Date() < deadline {
+            let addresses = try await omemo.addresses(for: [peer])
+            if !addresses.isEmpty {
+                var allReady = true
+                for address in addresses {
+                    _ = storage.identityKeyStore.setStatus(.verifiedActive, forIdentity: address)
+                    if !storage.sessionStore.containsSessionRecord(forAddress: address) {
+                        try await omemo.regenerateSession(forAddress: address)
+                    }
+                    if !storage.sessionStore.containsSessionRecord(forAddress: address) {
+                        allReady = false
+                    }
+                }
+                if allReady {
+                    WireLog.line("waitForPeerOmemoReady: ready (\(addresses.count) device(s))")
+                    return
+                }
+            }
+            pumpRunLoop(seconds: 0.5)
+        }
+        throw WireError.timeout("peer_omemo_ready")
+    }
+
+    @MainActor
+    public func writeReadyMarker() throws {
         try "ok".write(to: dataDir.appendingPathComponent("wire-ready"), atomically: true, encoding: .utf8)
         WireLog.line("READY")
+    }
+
+    @MainActor
+    public func waitForSendSignal(timeoutSeconds: Int = 600) async throws {
+        let signal = dataDir.appendingPathComponent("wire-send-now")
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: signal.path) {
+                try? FileManager.default.removeItem(at: signal)
+                return
+            }
+            pumpRunLoop(seconds: 0.25)
+        }
+        throw WireError.timeout("wire-send-now")
     }
 
     private func handleIncoming(_ message: Message) {
@@ -134,12 +192,15 @@ public final class SiskinNativeWireClient {
     @MainActor
     public func sendEncrypted(peer: BareJID, plaintext: String) async throws {
         guard let omemo = omemoModule else { throw WireError.notConnected }
+        try await ensureRosterPeer(peer)
+        try await waitForPeerOmemoReady(peer: peer, timeoutSeconds: 60)
         let message = Message()
         message.type = .chat
         message.to = JID(peer)
         message.body = plaintext
         let encrypted = try await omemo.encrypt(message: message, for: [peer])
         try await client.writer.write(stanza: encrypted.message)
+        pumpRunLoop(seconds: 1)
     }
 
     @MainActor
@@ -147,7 +208,7 @@ public final class SiskinNativeWireClient {
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutSeconds))
         while Date() < deadline {
             if currentBody() == expected { return true }
-            pumpRunLoop(seconds: 0.5)
+            pumpRunLoop(seconds: 0.25)
         }
         return currentBody() == expected
     }
@@ -189,6 +250,16 @@ public final class SiskinNativeWireClient {
     @MainActor
     private func pumpRunLoop(seconds: TimeInterval) {
         RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: seconds))
+    }
+
+    public static func awaitTimeoutSeconds() -> Int {
+        let env = ProcessInfo.processInfo.environment
+        for key in ["SISKIN_WIRE_AWAIT_TIMEOUT", "CONVERSATIONS_WIRE_AWAIT_TIMEOUT"] {
+            if let raw = env[key], let value = Int(raw), value > 0 {
+                return value
+            }
+        }
+        return 600
     }
 }
 

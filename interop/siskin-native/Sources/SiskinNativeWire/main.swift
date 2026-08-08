@@ -79,19 +79,40 @@ enum SiskinNativeWireMain {
             WireLog.line("NAMESPACE=eu.siacs.conversations.axolotl")
             WireLog.line("RUNNER=siskin_native_martinomemo")
 
-            let remotePeer = peer.map { BareJID($0) }
             WireLog.line("connect: invoking mode=\(mode ?? "nil") peer=\(peer ?? "nil")")
-            try await client.connect(remotePeer: mode == "wait" ? remotePeer : nil)
+            try await client.connect()
+
+            let awaitTimeout = SiskinNativeWireClient.awaitTimeoutSeconds()
 
             switch mode {
-            case "send":
+            case "publish":
+                await client.disconnect()
+                WireLog.line("OK")
+                return 0
+
+            case "hold-send":
                 guard let peer, let sendBody else {
-                    fputs("send requires --peer --send\n", stderr)
+                    fputs("hold-send requires --peer and --send\n", stderr)
                     return 1
                 }
                 let peerJid = BareJID(peer)
+                try await client.ensureRosterPeer(peerJid)
+                try await client.waitForPeerOmemoReady(peer: peerJid, timeoutSeconds: 240)
+                try client.writeReadyMarker()
+                try await client.waitForSendSignal()
                 try await client.sendEncrypted(peer: peerJid, plaintext: sendBody)
-                RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 1))
+                await client.disconnect()
+                WireLog.line("OK")
+                return 0
+
+            case "send":
+                guard let peer, let sendBody else {
+                    fputs("send requires --peer and --send\n", stderr)
+                    return 1
+                }
+                let peerJid = BareJID(peer)
+                try await Task.sleep(nanoseconds: 8_000_000_000)
+                try await client.sendEncrypted(peer: peerJid, plaintext: sendBody)
                 await client.disconnect()
                 WireLog.line("OK")
                 return 0
@@ -101,11 +122,15 @@ enum SiskinNativeWireMain {
                     fputs("wait requires --expect\n", stderr)
                     return 1
                 }
-                guard peer != nil else {
+                guard let peer else {
                     fputs("wait requires --peer (sender JID)\n", stderr)
                     return 1
                 }
-                let ok = await client.awaitBody(expectBody, timeoutSeconds: 120)
+                let peerJid = BareJID(peer)
+                try await client.ensureRosterPeer(peerJid)
+                try await client.waitForPeerOmemoReady(peer: peerJid, timeoutSeconds: 240)
+                try client.writeReadyMarker()
+                let ok = await client.awaitBody(expectBody, timeoutSeconds: awaitTimeout)
                 await client.disconnect()
                 if ok {
                     WireLog.line("OK")
