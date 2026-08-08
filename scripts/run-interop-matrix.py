@@ -213,6 +213,10 @@ def prewarm_omemo_publish(
     data_dir: Path,
 ) -> int:
     """Connect briefly so PEP device list is on the server before the peer waits."""
+    if not use_native_wire(client_id, pair, as_matrix_left, native_conversations):
+        print(f"prewarm: skip Smack proxy for {jid} (using legacy sleep)", flush=True)
+        time.sleep(10)
+        return 0
     print(f"prewarm: {client_id} OMEMO publish for {jid}", flush=True)
     return invoke_client(
         client_id,

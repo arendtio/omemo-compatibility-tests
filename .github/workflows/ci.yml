@@ -142,7 +142,9 @@ jobs:
         run: python3 scripts/download-implementations.py --only slixmpp-omemo
 
       - name: Start Prosody
-        run: docker compose -f docker/prosody/docker-compose.yml up -d --wait
+        run: |
+          docker compose -f docker/prosody/docker-compose.yml up -d
+          sleep 20
 
       - name: Register Prosody test users
         run: |
