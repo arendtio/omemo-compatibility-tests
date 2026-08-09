@@ -1,6 +1,7 @@
 package org.omemo.interop;
 
 import org.jivesoftware.smack.SmackConfiguration;
+import org.jivesoftware.smack.XMPPException;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.jivesoftware.smack.packet.Message;
 import org.jivesoftware.smack.packet.Stanza;
@@ -223,6 +224,30 @@ public final class LegacyOmemoWireClient {
         connection.sendStanza(wire);
     }
 
+    private void requestPeerDeviceList(EntityBareJid peer) throws Exception {
+        try {
+            omemoManager.requestDeviceListUpdateFor(peer);
+        } catch (XMPPException.XMPPErrorException e) {
+            if (e.getStanzaError() != null
+                    && "subscription-required".equals(e.getStanzaError().getCondition())) {
+                return;
+            }
+            throw e;
+        }
+    }
+
+    private void waitForOmemoPublish(long timeoutSeconds) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (System.nanoTime() < deadline) {
+            if (!omemoManager.getDevicesOf(jid).isEmpty()) {
+                Thread.sleep(2000);
+                return;
+            }
+            Thread.sleep(500);
+        }
+        throw new IllegalStateException("Timeout waiting for local OMEMO publish");
+    }
+
     private void preparePeer(EntityBareJid peer) throws Exception {
         preparedPeer = peer;
         Roster roster = Roster.getInstanceFor(connection);
@@ -230,9 +255,9 @@ public final class LegacyOmemoWireClient {
             roster.createEntry(peer, peer.getLocalpart().toString(), null);
             Thread.sleep(1000);
         }
-        omemoManager.requestDeviceListUpdateFor(peer);
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45);
         while (System.nanoTime() < deadline) {
+            requestPeerDeviceList(peer);
             Set<OmemoDevice> devices = omemoManager.getDevicesOf(peer);
             if (!devices.isEmpty()) {
                 for (OmemoDevice device : devices) {
@@ -246,9 +271,16 @@ public final class LegacyOmemoWireClient {
                 return;
             }
             Thread.sleep(500);
-            omemoManager.requestDeviceListUpdateFor(peer);
         }
         throw new IllegalStateException("No OMEMO devices discovered for peer " + peer);
+    }
+
+    private void preparePeerBestEffort(EntityBareJid peer) {
+        try {
+            preparePeer(peer);
+        } catch (Exception e) {
+            System.err.println("WARN: preparePeer: " + e.getMessage());
+        }
     }
 
     private void trustAllDevices(BareJid peer) throws Exception {
@@ -378,6 +410,7 @@ public final class LegacyOmemoWireClient {
             Thread.sleep(5000);
 
             if ("publish".equals(mode)) {
+                client.waitForOmemoPublish(30);
                 client.disconnect();
                 System.out.println("OK");
                 return 0;
@@ -417,7 +450,7 @@ public final class LegacyOmemoWireClient {
                 }
                 if (peerStr != null) {
                     EntityBareJid peer = JidCreate.entityBareFrom(peerStr);
-                    client.preparePeer(peer);
+                    client.preparePeerBestEffort(peer);
                 }
                 boolean ok = client.awaitBody(expectBody, awaitTimeoutSeconds());
                 client.disconnect();

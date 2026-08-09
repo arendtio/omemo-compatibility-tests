@@ -1025,8 +1025,28 @@ def ensure_ejabberd() -> int:
     return 0
 
 
+def docker_ejabberd_running() -> bool:
+    compose = ROOT / "docker" / "ejabberd" / "docker-compose.yml"
+    if not compose.is_file() or not shutil.which("docker"):
+        return False
+    try:
+        proc = subprocess.run(
+            ["docker", "compose", "-f", str(compose), "ps", "--status", "running", "-q", "ejabberd"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return proc.returncode == 0 and bool(proc.stdout.strip())
+    except OSError:
+        return False
+
+
 def ejabberdctl_cmd() -> list[str]:
     ejabberd_interop_env()
+    compose = ROOT / "docker" / "ejabberd" / "docker-compose.yml"
+    if docker_ejabberd_running():
+        return ["docker", "compose", "-f", str(compose), "exec", "-T", "ejabberd", "ejabberdctl"]
     base = ["ejabberdctl"]
     if os.name != "posix" or os.uname().sysname == "Darwin":
         return base
