@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import Martin
 import MartinOMEMO
 
@@ -16,6 +17,7 @@ public final class SiskinNativeWireClient {
     private var wireIncomingModule: WireIncomingMessageModule?
     private let bodyQueue = DispatchQueue(label: "siskin-native-wire.body")
     private var lastBody: String?
+    private var cancellables = Set<AnyCancellable>()
 
     public init(jid: BareJID, password: String, host: String, port: Int, dataDir: URL) {
         self.jid = jid
@@ -73,6 +75,15 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(DiscoveryModule(identity: DiscoveryModule.Identity(category: "client", type: "pc", name: "siskin-native-wire")))
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
         _ = client.modulesManager.register(PresenceModule())
+        client.module(.presence).subscriptionPublisher.sink { [weak self] change in
+            guard let self, change.action == .subscribe else { return }
+            Task { @MainActor in
+                let presence = self.client.module(.presence)
+                try? await presence.subscribed(by: change.jid)
+                try? await presence.subscribe(to: change.jid)
+                WireLog.line("auto-accept subscription from \(change.jid)")
+            }
+        }.store(in: &cancellables)
         _ = client.modulesManager.register(PubSubModule())
         _ = client.modulesManager.register(RosterModule(rosterManager: RosterManagerBase(store: WireRosterStore())))
         _ = client.modulesManager.register(wireIncoming)
@@ -113,9 +124,39 @@ public final class SiskinNativeWireClient {
         if roster.rosterManager.items(for: client.context).contains(where: { $0.jid == peerJid }) {
             return
         }
-        try await roster.addItem(jid: peerJid, name: peer.localPart, groups: [])
-        WireLog.line("ensureRosterPeer: subscribed \(peer)")
+        WireLog.line("ensureRosterPeer: adding \(peer)")
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    _ = try await roster.addItem(jid: peerJid, name: peer.localPart, groups: [])
+                }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 15_000_000_000)
+                    throw WireError.timeout("roster_add")
+                }
+                try await group.next()
+                group.cancelAll()
+            }
+        } catch {
+            WireLog.line("ensureRosterPeer: \(error)")
+        }
         pumpRunLoop(seconds: 1)
+    }
+
+    @MainActor
+    public func waitForOwnOmemoPublish() async throws {
+        guard let omemo = omemoModule else { throw WireError.notConnected }
+        WireLog.line("waitForOwnOmemoPublish")
+        let deadline = Date().addingTimeInterval(90)
+        while Date() < deadline {
+            if omemo.isReady {
+                pumpRunLoop(seconds: 8)
+                WireLog.line("waitForOwnOmemoPublish: done")
+                return
+            }
+            pumpRunLoop(seconds: 0.5)
+        }
+        throw WireError.timeout("own_omemo_publish")
     }
 
     @MainActor
@@ -132,7 +173,7 @@ public final class SiskinNativeWireClient {
                 for address in addresses {
                     _ = storage.identityKeyStore.setStatus(.verifiedActive, forIdentity: address)
                     if !storage.sessionStore.containsSessionRecord(forAddress: address) {
-                        try await omemo.regenerateSession(forAddress: address)
+                        try await regenerateSessionWithTimeout(omemo: omemo, address: address, timeoutSeconds: 30)
                     }
                     if !storage.sessionStore.containsSessionRecord(forAddress: address) {
                         allReady = false
@@ -245,6 +286,21 @@ public final class SiskinNativeWireClient {
             pumpRunLoop(seconds: 0.5)
         }
         throw WireError.timeout("omemo_ready")
+    }
+
+    @MainActor
+    private func regenerateSessionWithTimeout(omemo: OMEMOModule, address: SignalAddress, timeoutSeconds: Int) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor in
+                try await omemo.regenerateSession(forAddress: address)
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeoutSeconds) * 1_000_000_000)
+                throw WireError.timeout("regenerate_session")
+            }
+            try await group.next()
+            group.cancelAll()
+        }
     }
 
     @MainActor

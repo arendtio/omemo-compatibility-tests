@@ -6,6 +6,8 @@ import SiskinNativeWireSupport
 @main
 enum SiskinNativeWireMain {
     static func main() {
+        fputs("siskin-native-wire starting\n", stderr)
+        fflush(stderr)
         let done = DispatchSemaphore(value: 0)
         var exitCode: Int32 = 1
         Task { @MainActor in
@@ -97,7 +99,7 @@ enum SiskinNativeWireMain {
                 }
                 let peerJid = BareJID(peer)
                 try await client.ensureRosterPeer(peerJid)
-                try await client.waitForPeerOmemoReady(peer: peerJid, timeoutSeconds: 240)
+                try await client.waitForOwnOmemoPublish()
                 try client.writeReadyMarker()
                 try await client.waitForSendSignal()
                 try await client.sendEncrypted(peer: peerJid, plaintext: sendBody)
