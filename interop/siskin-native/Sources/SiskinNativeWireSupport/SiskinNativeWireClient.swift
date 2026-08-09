@@ -74,7 +74,7 @@ public final class SiskinNativeWireClient {
         _ = client.modulesManager.register(SoftwareVersionModule(version: SoftwareVersionModule.SoftwareVersion(name: "siskin-native-wire", version: "0.1", os: "macOS")))
         _ = client.modulesManager.register(PresenceModule())
         _ = client.modulesManager.register(PubSubModule())
-        _ = client.modulesManager.register(RosterModule(rosterManager: DefaultRosterManager(store: DefaultRosterStore())))
+        _ = client.modulesManager.register(RosterModule(rosterManager: RosterManagerBase(store: WireRosterStore())))
         _ = client.modulesManager.register(wireIncoming)
         _ = client.modulesManager.register(omemo)
         WireLog.line("connect: modules registered")
