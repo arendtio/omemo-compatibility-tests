@@ -377,6 +377,12 @@ public final class LegacyOmemoWireClient {
             client.connect();
             Thread.sleep(5000);
 
+            if ("publish".equals(mode)) {
+                client.disconnect();
+                System.out.println("OK");
+                return 0;
+            }
+
             if ("send-wait".equals(mode)) {
                 if (peerStr == null || sendBody == null || expectBody == null) {
                     throw new IllegalArgumentException("send-wait requires --peer --send --expect");
